@@ -21,17 +21,23 @@ import (
 // OpenAI compatible request structures
 type ChatCompletionRequest struct {
 	Model     string          `json:"model"`
-	Messages  []types.Message `json:"messages"`
+	Messages  []OpenaiMessage `json:"messages"`
 	Stream    bool            `json:"stream,omitempty"`
 	MaxTokens int             `json:"max_tokens,omitempty"`
 }
 
+type OpenaiMessage struct {
+	Role    string
+	Content any // string or []ClaudeMessageContent
+}
+
 // Claude API compatible request structure
 type ClaudeAPIRequest struct {
-	Model     string          `json:"model"`
-	MaxTokens int             `json:"max_tokens"`
-	Messages  []ClaudeMessage `json:"messages"`
-	Stream    bool            `json:"stream,omitempty"`
+	Model     string                 `json:"model"`
+	MaxTokens int                    `json:"max_tokens"`
+	Messages  []ClaudeMessage        `json:"messages"`
+	Stream    bool                   `json:"stream,omitempty"`
+	System    []ClaudeMessageContent `json:"system,omitempty"`
 }
 
 // Claude API response structure
@@ -103,8 +109,8 @@ type SessionCreateData struct {
 }
 
 type ClaudeMessage struct {
-	Role    string                 `json:"role"`
-	Content []ClaudeMessageContent `json:"content"`
+	Role    string `json:"role"`
+	Content any    `json:"content"` // string or []ClaudeMessageContent
 }
 type ClaudeMessageContent struct {
 	Type string `json:"type"`
@@ -365,7 +371,16 @@ func (s *OpenAIService) ConvertRequest(requestBody []byte, conversationID string
 	var content string
 	if len(openAIReq.Messages) > 0 {
 		lastMsg := openAIReq.Messages[len(openAIReq.Messages)-1]
-		content = lastMsg.Content
+		if str, ok := lastMsg.Content.(string); ok {
+			content = str
+		}
+		if ls, ok := lastMsg.Content.([]interface{}); ok {
+			for _, l := range ls {
+				if str, ok := l.(map[string]any); ok {
+					content += str["text"].(string)
+				}
+			}
+		}
 	}
 
 	return LongCatRequest{
@@ -572,27 +587,21 @@ func (s *ClaudeService) ConvertRequest(requestBody []byte, conversationID string
 	var content string
 	if len(claudeReq.Messages) > 0 {
 		lastMsg := claudeReq.Messages[len(claudeReq.Messages)-1]
-		if len(lastMsg.Content) > 0 {
-			for _, part := range lastMsg.Content {
-				content += part.Text
-			}
+		if str, ok := lastMsg.Content.(string); ok {
+			content = str
 		}
-	}
-
-	messages := []types.Message{}
-	for _, msg := range claudeReq.Messages {
-		if len(msg.Content) > 0 {
-			messages = append(messages, types.Message{
-				Role:    msg.Role,
-				Content: msg.Content[0].Text,
-			})
+		if ls, ok := lastMsg.Content.([]interface{}); ok {
+			for _, part := range ls {
+				if str, ok := part.(map[string]any); ok {
+					content += str["text"].(string)
+				}
+			}
 		}
 	}
 
 	return LongCatRequest{
 		Content:        content,
 		ConversationId: conversationID,
-		Messages:       messages,
 		ReasonEnabled:  0,
 		SearchEnabled:  0,
 		Regenerate:     0,
@@ -645,7 +654,7 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 	if len(openAIChunk.Choices) == 0 {
 		return nil
 	}
-	
+
 	// Convert OpenAI chunk to Claude format
 	if openAIChunk.Choices[0].Delta.Content != "" {
 		return ClaudeStreamChunk{
@@ -870,7 +879,7 @@ type StreamProcessor struct {
 	responseID     string
 	model          string
 	accumulated    strings.Builder // Tracks what we've already sent
-	lastContent    string           // Tracks the last full content from LongCat
+	lastContent    string          // Tracks the last full content from LongCat
 	finishReason   string
 	tokenInfo      TokenInfo
 }
@@ -1181,7 +1190,26 @@ func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Messag
 		if err := json.Unmarshal(requestBody, &req); err != nil {
 			return nil, err
 		}
-		return req.Messages, nil
+		messages := []types.Message{}
+		for _, m := range req.Messages {
+			if str, ok := m.Content.(string); ok {
+				messages = append(messages, types.Message{
+					Content: str,
+					Role:    m.Role,
+				})
+			}
+			if ls, ok := m.Content.([]interface{}); ok {
+				for _, v := range ls {
+					if vm, ok := v.(map[string]interface{}); ok {
+						messages = append(messages, types.Message{
+							Content: vm["text"].(string),
+							Role:    m.Role,
+						})
+					}
+				}
+			}
+		}
+		return messages, nil
 	case "/v1/messages":
 		var req ClaudeAPIRequest
 		if err := json.Unmarshal(requestBody, &req); err != nil {
@@ -1190,12 +1218,28 @@ func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Messag
 
 		// Convert Claude messages to our Message format
 		messages := []types.Message{}
-		for _, msg := range req.Messages {
-			if len(msg.Content) > 0 {
+		for _, m := range req.System {
+			messages = append(messages, types.Message{
+				Content: m.Text,
+				Role:    "system",
+			})
+		}
+		for _, m := range req.Messages {
+			if str, ok := m.Content.(string); ok {
 				messages = append(messages, types.Message{
-					Role:    msg.Role,
-					Content: msg.Content[0].Text,
+					Content: str,
+					Role:    m.Role,
 				})
+			}
+			if ls, ok := m.Content.([]interface{}); ok {
+				for _, v := range ls {
+					if vm, ok := v.(map[string]interface{}); ok {
+						messages = append(messages, types.Message{
+							Content: vm["text"].(string),
+							Role:    m.Role,
+						})
+					}
+				}
 			}
 		}
 		return messages, nil
