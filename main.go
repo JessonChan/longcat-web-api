@@ -641,6 +641,11 @@ func (s *ClaudeService) ConvertResponse(resp *http.Response, stream bool) (<-cha
 }
 
 func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChunk, processor *StreamProcessor) interface{} {
+	// Ensure we have valid choices
+	if len(openAIChunk.Choices) == 0 {
+		return nil
+	}
+	
 	// Convert OpenAI chunk to Claude format
 	if openAIChunk.Choices[0].Delta.Content != "" {
 		return ClaudeStreamChunk{
@@ -864,7 +869,8 @@ type StreamProcessor struct {
 	parentID       int
 	responseID     string
 	model          string
-	accumulated    strings.Builder // Accumulate content for proper formatting
+	accumulated    strings.Builder // Tracks what we've already sent
+	lastContent    string           // Tracks the last full content from LongCat
 	finishReason   string
 	tokenInfo      TokenInfo
 }
@@ -874,6 +880,7 @@ func NewStreamProcessor() *StreamProcessor {
 		responseID:  uuid.New().String(),
 		model:       "LongCat-Flash",
 		accumulated: strings.Builder{},
+		lastContent: "",
 	}
 }
 
@@ -918,9 +925,10 @@ func (p *StreamProcessor) ProcessStream(resp *http.Response, stream bool) (<-cha
 			}
 
 			// Accumulate content
+			// LongCat sends cumulative content (full content so far), not deltas
+			// We need to track this to calculate deltas for streaming
 			if longCatResp.Content != "" {
-				p.accumulated.Reset()
-				p.accumulated.WriteString(longCatResp.Content)
+				p.lastContent = longCatResp.Content
 			}
 
 			// Determine finish reason
@@ -968,14 +976,16 @@ func (p *StreamProcessor) convertToOpenAIFormat(longCatResp LongCatResponse, str
 			role = "assistant"
 		}
 
-		// Only include content if it's new (not already accumulated)
+		// Calculate delta content
 		content := ""
 		if longCatResp.Choices[0].Delta.Content != "" {
+			// If LongCat provides delta directly, use it
 			content = longCatResp.Choices[0].Delta.Content
 		} else if longCatResp.Content != "" {
-			// Calculate the delta by subtracting accumulated content
+			// Calculate the delta by comparing with what we've already sent
 			accumulated := p.accumulated.String()
-			if strings.HasPrefix(longCatResp.Content, accumulated) {
+			if len(longCatResp.Content) > len(accumulated) {
+				// New content is everything after what we've already sent
 				content = longCatResp.Content[len(accumulated):]
 			}
 		}
@@ -998,13 +1008,13 @@ func (p *StreamProcessor) convertToOpenAIFormat(longCatResp LongCatResponse, str
 			},
 		}
 
-		// Update accumulated content
+		// Update accumulated content with what we're sending
 		if content != "" {
 			p.accumulated.WriteString(content)
 		}
 
 		// Only return chunk if it has content or is the final chunk
-		if content != "" || p.finishReason != "" {
+		if content != "" || p.finishReason != "" || role != "" {
 			return chunk
 		}
 		return nil
