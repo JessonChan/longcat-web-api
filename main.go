@@ -10,19 +10,20 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Jessonchan/longcat-web-api/config"
+	conversation "github.com/Jessonchan/longcat-web-api/convsersation"
+	"github.com/Jessonchan/longcat-web-api/types"
+	"github.com/google/uuid"
 )
 
 // OpenAI compatible request structures
 type ChatCompletionRequest struct {
-	Model     string    `json:"model"`
-	Messages  []Message `json:"messages"`
-	Stream    bool      `json:"stream,omitempty"`
-	MaxTokens int       `json:"max_tokens,omitempty"`
+	Model     string          `json:"model"`
+	Messages  []types.Message `json:"messages"`
+	Stream    bool            `json:"stream,omitempty"`
+	MaxTokens int             `json:"max_tokens,omitempty"`
 }
 
 // Claude API compatible request structure
@@ -101,11 +102,6 @@ type SessionCreateData struct {
 	UpdateAt         int64  `json:"updateAt"`
 }
 
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
 type ClaudeMessage struct {
 	Role    string                 `json:"role"`
 	Content []ClaudeMessageContent `json:"content"`
@@ -153,12 +149,12 @@ type Usage struct {
 
 // LongCat specific structures - ENHANCED
 type LongCatRequest struct {
-	Content        string    `json:"content"`
-	Messages       []Message `json:"messages"`
-	ReasonEnabled  int       `json:"reasonEnabled"`
-	SearchEnabled  int       `json:"searchEnabled"`
-	Regenerate     int       `json:"regenerate"`
-	ConversationId string    `json:"conversationId,omitempty"`
+	Content        string          `json:"content"`
+	Messages       []types.Message `json:"messages"`
+	ReasonEnabled  int             `json:"reasonEnabled"`
+	SearchEnabled  int             `json:"searchEnabled"`
+	Regenerate     int             `json:"regenerate"`
+	ConversationId string          `json:"conversationId,omitempty"`
 }
 
 type LongCatResponse struct {
@@ -214,25 +210,22 @@ const (
 
 // APIService interface for different API compatibility layers
 type APIService interface {
-	ProcessRequest(ctx context.Context, requestBody []byte) (*http.Response, error)
+	ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error)
 	ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error)
 	GetResponseContentType(stream bool) string
 	NeedsSession(requestBody []byte) bool
 	GetServiceType() APIServiceType
 	HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error
 	HandleStreamingResponse(w http.ResponseWriter, flusher http.Flusher, chunks <-chan interface{}, errs <-chan error) error
+	ConvertRequest(requestBody []byte, conversationID string) (LongCatRequest, error)
 }
 
 // LongCatClient handles unified HTTP requests to LongCat server
 type LongCatClient struct {
-	client       *http.Client
-	longCatURL   string
-	sessionURL   string
-	headers      map[string]string
-	conversation struct {
-		ID string
-		mu sync.RWMutex
-	}
+	client     *http.Client
+	longCatURL string
+	sessionURL string
+	headers    map[string]string
 }
 
 func NewLongCatClient() *LongCatClient {
@@ -260,18 +253,6 @@ func NewLongCatClient() *LongCatClient {
 			"x-requested-with":   "XMLHttpRequest",
 		},
 	}
-}
-
-func (c *LongCatClient) SetConversationID(id string) {
-	c.conversation.mu.Lock()
-	defer c.conversation.mu.Unlock()
-	c.conversation.ID = id
-}
-
-func (c *LongCatClient) GetConversationID() string {
-	c.conversation.mu.RLock()
-	defer c.conversation.mu.RUnlock()
-	return c.conversation.ID
 }
 
 // CreateSession creates a new conversation session
@@ -361,24 +342,31 @@ func (s *OpenAIService) NeedsSession(requestBody []byte) bool {
 	return len(req.Messages) == 1
 }
 
-func (s *OpenAIService) ProcessRequest(ctx context.Context, requestBody []byte) (*http.Response, error) {
+func (s *OpenAIService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
 	var req ChatCompletionRequest
 	if err := json.Unmarshal(requestBody, &req); err != nil {
 		return nil, fmt.Errorf("invalid OpenAI request: %w", err)
 	}
 
-	longCatReq := s.convertRequest(req)
+	longCatReq, err := s.ConvertRequest(requestBody, conversationID)
+	if err != nil {
+		return nil, err
+	}
+
 	return s.longCatClient.SendRequest(ctx, longCatReq)
 }
 
-func (s *OpenAIService) convertRequest(openAIReq ChatCompletionRequest) LongCatRequest {
+func (s *OpenAIService) ConvertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
+	var openAIReq ChatCompletionRequest
+	if err := json.Unmarshal(requestBody, &openAIReq); err != nil {
+		return LongCatRequest{}, fmt.Errorf("invalid OpenAI request: %w", err)
+	}
+
 	var content string
 	if len(openAIReq.Messages) > 0 {
 		lastMsg := openAIReq.Messages[len(openAIReq.Messages)-1]
 		content = lastMsg.Content
 	}
-
-	conversationID := s.longCatClient.GetConversationID()
 
 	return LongCatRequest{
 		Content:        content,
@@ -386,7 +374,7 @@ func (s *OpenAIService) convertRequest(openAIReq ChatCompletionRequest) LongCatR
 		ReasonEnabled:  0,
 		SearchEnabled:  0,
 		Regenerate:     0,
-	}
+	}, nil
 }
 
 func (s *OpenAIService) ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error) {
@@ -561,17 +549,26 @@ func (s *ClaudeService) NeedsSession(requestBody []byte) bool {
 	return len(req.Messages) == 1
 }
 
-func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte) (*http.Response, error) {
+func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
 	var req ClaudeAPIRequest
 	if err := json.Unmarshal(requestBody, &req); err != nil {
 		return nil, fmt.Errorf("invalid Claude request: %w", err)
 	}
 
-	longCatReq := s.convertRequest(req)
+	longCatReq, err := s.ConvertRequest(requestBody, conversationID)
+	if err != nil {
+		return nil, err
+	}
+
 	return s.longCatClient.SendRequest(ctx, longCatReq)
 }
 
-func (s *ClaudeService) convertRequest(claudeReq ClaudeAPIRequest) LongCatRequest {
+func (s *ClaudeService) ConvertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
+	var claudeReq ClaudeAPIRequest
+	if err := json.Unmarshal(requestBody, &claudeReq); err != nil {
+		return LongCatRequest{}, fmt.Errorf("invalid Claude request: %w", err)
+	}
+
 	var content string
 	if len(claudeReq.Messages) > 0 {
 		lastMsg := claudeReq.Messages[len(claudeReq.Messages)-1]
@@ -582,17 +579,15 @@ func (s *ClaudeService) convertRequest(claudeReq ClaudeAPIRequest) LongCatReques
 		}
 	}
 
-	messages := []Message{}
+	messages := []types.Message{}
 	for _, msg := range claudeReq.Messages {
 		if len(msg.Content) > 0 {
-			messages = append(messages, Message{
+			messages = append(messages, types.Message{
 				Role:    msg.Role,
 				Content: msg.Content[0].Text,
 			})
 		}
 	}
-
-	conversationID := s.longCatClient.GetConversationID()
 
 	return LongCatRequest{
 		Content:        content,
@@ -601,7 +596,7 @@ func (s *ClaudeService) convertRequest(claudeReq ClaudeAPIRequest) LongCatReques
 		ReasonEnabled:  0,
 		SearchEnabled:  0,
 		Regenerate:     0,
-	}
+	}, nil
 }
 
 func (s *ClaudeService) ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error) {
@@ -1076,17 +1071,19 @@ func (p *StreamProcessor) convertToClaudeFormat(longCatResp LongCatResponse, str
 
 // UnifiedHandler handles both OpenAI and Claude API requests using the interface
 type UnifiedHandler struct {
-	longCatClient *LongCatClient
-	openAIService APIService
-	claudeService APIService
+	longCatClient       *LongCatClient
+	openAIService       APIService
+	claudeService       APIService
+	conversationManager *conversation.ConversationManager
 }
 
 func NewUnifiedHandler() *UnifiedHandler {
 	longCatClient := NewLongCatClient()
 	return &UnifiedHandler{
-		longCatClient: longCatClient,
-		openAIService: NewOpenAIService(longCatClient),
-		claudeService: NewClaudeService(longCatClient),
+		longCatClient:       longCatClient,
+		openAIService:       NewOpenAIService(longCatClient),
+		claudeService:       NewClaudeService(longCatClient),
+		conversationManager: conversation.NewConversationManager(),
 	}
 }
 
@@ -1130,26 +1127,70 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		service = h.claudeService
 	}
 
-	// Check if session creation is needed
-	if service.NeedsSession(bs) {
-		conversationID, err := h.longCatClient.CreateSession(r.Context())
+	// Determine conversation ID based on message history
+	var conversationID string
+
+	// Extract messages from request to generate fingerprint
+	messages, err := extractMessagesFromRequest(bs, r.URL.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to parse messages: %v", err), http.StatusBadRequest)
+		return
+	}
+	// Check if we have an existing conversation for this message history
+	if existingConvID, exists := h.conversationManager.FindConversation(messages); exists {
+		conversationID = existingConvID
+		fmt.Printf("Using existing conversation: %s for message fingerprint: %s\n", conversationID)
+	} else {
+		// Create new conversation session
+		newConvID, err := h.longCatClient.CreateSession(r.Context())
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create session: %v", err), http.StatusInternalServerError)
 			return
 		}
-		h.longCatClient.SetConversationID(conversationID)
-		fmt.Printf("Created new session with ID: %s\n", conversationID)
+		conversationID = newConvID
+		h.conversationManager.SetConversation(messages, conversationID)
+		fmt.Printf("Created new conversation: for message fingerprint: %s\n", conversationID)
 	}
 
 	// Determine if streaming is requested
 	streaming := h.isStreamingRequest(bs, r.URL.Path)
 
 	if !streaming {
-		h.handleNonStreaming(w, r, service, bs)
+		h.handleNonStreaming(w, r, service, bs, conversationID)
 		return
 	}
 
-	h.handleStreaming(w, r, service, bs)
+	h.handleStreaming(w, r, service, bs, conversationID)
+}
+
+// extractMessagesFromRequest extracts messages from OpenAI/Claude request
+func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Message, error) {
+	switch path {
+	case "/v1/chat/completions":
+		var req ChatCompletionRequest
+		if err := json.Unmarshal(requestBody, &req); err != nil {
+			return nil, err
+		}
+		return req.Messages, nil
+	case "/v1/messages":
+		var req ClaudeAPIRequest
+		if err := json.Unmarshal(requestBody, &req); err != nil {
+			return nil, err
+		}
+
+		// Convert Claude messages to our Message format
+		messages := []types.Message{}
+		for _, msg := range req.Messages {
+			if len(msg.Content) > 0 {
+				messages = append(messages, types.Message{
+					Role:    msg.Role,
+					Content: msg.Content[0].Text,
+				})
+			}
+		}
+		return messages, nil
+	}
+	return nil, fmt.Errorf("unsupported endpoint")
 }
 
 func (h *UnifiedHandler) isStreamingRequest(requestBody []byte, path string) bool {
@@ -1168,8 +1209,8 @@ func (h *UnifiedHandler) isStreamingRequest(requestBody []byte, path string) boo
 	return false
 }
 
-func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Request, service APIService, requestBody []byte) {
-	resp, err := service.ProcessRequest(r.Context(), requestBody)
+func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Request, service APIService, requestBody []byte, conversationID string) {
+	resp, err := service.ProcessRequest(r.Context(), requestBody, conversationID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to make request: %v", err), http.StatusInternalServerError)
 		return
@@ -1184,7 +1225,7 @@ func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request, service APIService, requestBody []byte) {
+func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request, service APIService, requestBody []byte, conversationID string) {
 	// Set SSE headers with CORS support
 	w.Header().Set("Content-Type", service.GetResponseContentType(true))
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1195,7 +1236,7 @@ func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, anthropic-version")
 	w.Header().Set("Access-Control-Expose-Headers", "*")
 
-	resp, err := service.ProcessRequest(r.Context(), requestBody)
+	resp, err := service.ProcessRequest(r.Context(), requestBody, conversationID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to make request: %v", err), http.StatusInternalServerError)
 		return
