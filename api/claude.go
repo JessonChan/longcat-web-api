@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -14,9 +15,9 @@ import (
 type ClaudeAPIRequest struct {
 	Model     string          `json:"model"`
 	MaxTokens int             `json:"max_tokens"`
-	Messages  []ClaudeMessage  `json:"messages"`
+	Messages  []ClaudeMessage `json:"messages"`
 	Stream    bool            `json:"stream,omitempty"`
-	System    interface{}      `json:"system,omitempty"` // string or []ClaudeMessageContent
+	System    interface{}     `json:"system,omitempty"` // string or []ClaudeMessageContent
 }
 
 type ClaudeMessage struct {
@@ -48,12 +49,12 @@ type ClaudeResponseContent struct {
 }
 
 type ClaudeUsage struct {
-	InputTokens              int                     `json:"input_tokens"`
-	OutputTokens             int                     `json:"output_tokens"`
-	CacheCreationInputTokens *int                    `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadInputTokens     *int                    `json:"cache_read_input_tokens,omitempty"`
-	ServiceTier              *string                 `json:"service_tier,omitempty"`
-	ServerToolUse            *ClaudeServerToolUse    `json:"server_tool_use,omitempty"`
+	InputTokens              int                  `json:"input_tokens"`
+	OutputTokens             int                  `json:"output_tokens"`
+	CacheCreationInputTokens *int                 `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     *int                 `json:"cache_read_input_tokens,omitempty"`
+	ServiceTier              *string              `json:"service_tier,omitempty"`
+	ServerToolUse            *ClaudeServerToolUse `json:"server_tool_use,omitempty"`
 }
 
 type ClaudeServerToolUse struct {
@@ -82,9 +83,9 @@ type ClaudeStreamDelta struct {
 }
 
 type ClaudeMessageDelta struct {
-	Type         string      `json:"type"`
-	Delta        ClaudeDelta `json:"delta"`
-	Usage        ClaudeUsage `json:"usage"`
+	Type  string      `json:"type"`
+	Delta ClaudeDelta `json:"delta"`
+	Usage ClaudeUsage `json:"usage"`
 }
 
 type ClaudeDelta struct {
@@ -107,7 +108,6 @@ func NewClaudeService(client *LongCatClient) *ClaudeService {
 		longCatClient: client,
 	}
 }
-
 
 func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
 	var req ClaudeAPIRequest
@@ -249,7 +249,7 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 	// Handle final message with proper Claude stop reason
 	if choice.FinishReason != "" {
 		stopReason := s.mapToClaudeStopReason(choice.FinishReason)
-		
+
 		// Create message delta with final usage and stop reason
 		return ClaudeStreamChunk{
 			Type: "message_delta",
@@ -289,7 +289,6 @@ func (s *ClaudeService) GetResponseContentType(stream bool) string {
 	}
 	return "application/json"
 }
-
 
 func (s *ClaudeService) HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error {
 	var fullContent strings.Builder
@@ -353,6 +352,7 @@ func (s *ClaudeService) HandleStreamingResponse(w http.ResponseWriter, flusher h
 	for {
 		select {
 		case chunk, ok := <-chunks:
+			fmt.Printf("Received chunk: %+v :%v\n", chunk, ok)
 			if !ok {
 				if !hasReceivedContent {
 					// Send complete default sequence if no content was received
@@ -365,7 +365,7 @@ func (s *ClaudeService) HandleStreamingResponse(w http.ResponseWriter, flusher h
 					s.sendMessageDelta(w, flusher, messageID, "end_turn", inputTokens, outputTokens)
 					sentMessageDelta = true
 				}
-				
+
 				s.sendMessageStop(w, flusher)
 				return nil
 			}
@@ -396,8 +396,8 @@ func (s *ClaudeService) HandleStreamingResponse(w http.ResponseWriter, flusher h
 				case "message_delta":
 					// Send message_start if not already sent
 					if !sentMessageStart {
-						s.sendMessageStart(w, flusher, messageID, 
-							claudeChunk.MessageDelta.Usage.InputTokens, 
+						s.sendMessageStart(w, flusher, messageID,
+							claudeChunk.MessageDelta.Usage.InputTokens,
 							claudeChunk.MessageDelta.Usage.OutputTokens)
 						sentMessageStart = true
 					}
@@ -416,7 +416,7 @@ func (s *ClaudeService) HandleStreamingResponse(w http.ResponseWriter, flusher h
 						fmt.Fprintf(w, "event: %s\ndata: %s\n\n", claudeChunk.Type, data)
 						flusher.Flush()
 					}
-					
+
 					sentMessageDelta = true
 					inputTokens = claudeChunk.MessageDelta.Usage.InputTokens
 					outputTokens = claudeChunk.MessageDelta.Usage.OutputTokens
@@ -513,7 +513,7 @@ func (s *ClaudeService) sendDefaultSequence(w http.ResponseWriter, flusher http.
 	// Send complete default sequence for empty response
 	s.sendMessageStart(w, flusher, messageID, 0, 0)
 	s.sendContentBlockStart(w, flusher)
-	
+
 	// Send default content
 	contentDelta := ClaudeStreamChunk{
 		Type:  "content_block_delta",
@@ -527,7 +527,7 @@ func (s *ClaudeService) sendDefaultSequence(w http.ResponseWriter, flusher http.
 		fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", data)
 		flusher.Flush()
 	}
-	
+
 	s.sendContentBlockStop(w, flusher)
 	s.sendMessageDelta(w, flusher, messageID, "end_turn", 0, 0)
 	s.sendMessageStop(w, flusher)
