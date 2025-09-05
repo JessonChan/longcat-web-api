@@ -86,6 +86,13 @@ The server will start on port 8082 by default.
    - **Model:** `gpt-4`
 4. **Save and select the LongCat API configuration**
 
+### Claude Code
+
+1. **Set environment variable:**
+   ```bash
+   export ANTHROPIC_BASE_URL=http://localhost:8082
+   ```
+
 ### Other OpenAI-Compatible Clients
 
 For any OpenAI-compatible client, use these settings:

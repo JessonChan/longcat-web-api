@@ -92,13 +92,20 @@ longcat-web-api
    - **模型：** `gpt-4`
 4. **保存并选择 LongCat API 配置**
 
+### Claude Code 
+
+
+1. **设置环境变量：**
+   ```bash
+   export ANTHROPIC_BASE_URL=http://localhost:8082
+   ```
+
 ### 其他 OpenAI 兼容客户端
 
 对于任何 OpenAI 兼容的客户端，使用以下设置：
 - **API 密钥：** `any-code` (不验证，但大多数客户端需要)
 - **基础 URL：** `http://localhost:8082/v1`
 - **模型：** `gpt-4` (或您喜欢的任何模型名称)
-
 
 ### 从源代码安装
 ```bash
