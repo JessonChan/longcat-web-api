@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/Jessonchan/longcat-web-api/logging"
 )
 
 // Claude API compatible request structure
@@ -236,7 +237,7 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 
 	// Handle content delta
 	if choice.Delta.Content != "" {
-		return ClaudeStreamChunk{
+		claudeChunk := ClaudeStreamChunk{
 			Type:  "content_block_delta",
 			Index: 0,
 			Delta: &ClaudeStreamDelta{
@@ -244,6 +245,9 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 				Text: choice.Delta.Content,
 			},
 		}
+		// Log Claude conversion output in verbose mode
+		logging.LogDebug("Claude Conversion Output: %+v", claudeChunk)
+		return claudeChunk
 	}
 
 	// Handle final message with proper Claude stop reason
@@ -251,7 +255,7 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 		stopReason := s.mapToClaudeStopReason(choice.FinishReason)
 
 		// Create message delta with final usage and stop reason
-		return ClaudeStreamChunk{
+		claudeChunk := ClaudeStreamChunk{
 			Type: "message_delta",
 			MessageDelta: &ClaudeMessageDelta{
 				Type: "message_delta",
@@ -264,6 +268,9 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 				},
 			},
 		}
+		// Log Claude conversion output in verbose mode
+		logging.LogDebug("Claude Conversion Output (final): %+v", claudeChunk)
+		return claudeChunk
 	}
 
 	return nil
@@ -352,7 +359,6 @@ func (s *ClaudeService) HandleStreamingResponse(w http.ResponseWriter, flusher h
 	for {
 		select {
 		case chunk, ok := <-chunks:
-			fmt.Printf("Received chunk: %+v :%v\n", chunk, ok)
 			if !ok {
 				if !hasReceivedContent {
 					// Send complete default sequence if no content was received

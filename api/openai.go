@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"github.com/google/uuid"
+	"github.com/Jessonchan/longcat-web-api/logging"
 )
 
 // OpenAI compatible request structures
@@ -138,7 +139,6 @@ func (p *StreamProcessor) ProcessStream(resp *http.Response, stream bool) (<-cha
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
 			line := scanner.Text()
-			// fmt.Println("Received line:", line)
 			if !strings.HasPrefix(line, "data:") {
 				continue
 			}
@@ -154,6 +154,9 @@ func (p *StreamProcessor) ProcessStream(resp *http.Response, stream bool) (<-cha
 				errs <- fmt.Errorf("failed to unmarshal response: %w", err)
 				return
 			}
+
+			// Log LongCat response data in verbose mode
+			logging.LogDebug("LongCat Response: %+v", longCatResp)
 
 			// Update processor state
 			p.conversationID = longCatResp.ConversationID
@@ -187,8 +190,13 @@ func (p *StreamProcessor) ProcessStream(resp *http.Response, stream bool) (<-cha
 
 			// Convert to OpenAI format with proper delta handling
 			chunk := p.convertToOpenAIFormat(longCatResp, true)
-			if chunk != nil && stream {
-				chunks <- *chunk
+			if chunk != nil {
+				// Log OpenAI conversion output in verbose mode
+				logging.LogDebug("OpenAI Conversion Output: %+v", *chunk)
+				
+				if stream {
+					chunks <- *chunk
+				}
 			}
 
 			// If this is the final chunk, ensure it's properly handled

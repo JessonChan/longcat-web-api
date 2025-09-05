@@ -13,6 +13,7 @@ import (
 	"github.com/Jessonchan/longcat-web-api/api"
 	"github.com/Jessonchan/longcat-web-api/config"
 	conversation "github.com/Jessonchan/longcat-web-api/convsersation"
+	"github.com/Jessonchan/longcat-web-api/logging"
 	"github.com/Jessonchan/longcat-web-api/types"
 )
 
@@ -55,15 +56,17 @@ type UnifiedHandler struct {
 	openAIService       api.APIService
 	claudeService       api.APIService
 	conversationManager *conversation.ConversationManager
+	verbose             bool
 }
 
-func NewUnifiedHandler() *UnifiedHandler {
+func NewUnifiedHandler(verbose bool) *UnifiedHandler {
 	longCatClient := api.NewLongCatClient()
 	return &UnifiedHandler{
 		longCatClient:       longCatClient,
 		openAIService:       api.NewOpenAIService(longCatClient),
 		claudeService:       api.NewClaudeService(longCatClient),
 		conversationManager: conversation.NewConversationManager(),
+		verbose:             verbose,
 	}
 }
 
@@ -80,7 +83,7 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path != "/v1/chat/completions" && r.URL.Path != "/v1/messages" {
-		fmt.Println(r.URL.Path, "not found")
+		logging.LogDebug("%s not found", r.URL.Path)
 		http.NotFound(w, r)
 		return
 	}
@@ -96,7 +99,7 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(bs))
-	fmt.Println("Request Body:", string(bs), r.URL.Path)
+	logging.LogDebug("Request Body: %s %s", string(bs), r.URL.Path)
 
 	// Select appropriate service based on endpoint
 	var service api.APIService
@@ -119,7 +122,7 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if we have an existing conversation for this message history
 	if existingConvID, exists := h.conversationManager.FindConversation(messages); exists {
 		conversationID = existingConvID
-		fmt.Printf("Using existing conversation: %s for message fingerprint: %s\n", conversationID)
+		logging.LogInfo("Using existing conversation: %s", conversationID)
 	} else {
 		// Create new conversation session
 		newConvID, err := h.longCatClient.CreateSession(r.Context())
@@ -129,7 +132,7 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		conversationID = newConvID
 		h.conversationManager.SetConversation(messages, conversationID)
-		fmt.Printf("Created new conversation: for message fingerprint: %s\n", conversationID)
+		logging.LogInfo("Created new conversation: %s", conversationID)
 	}
 
 	// Determine if streaming is requested
@@ -285,7 +288,7 @@ func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request,
 
 	// Use the service's own handler method instead of type assertion
 	if err := service.HandleStreamingResponse(w, flusher, chunks, errs); err != nil {
-		fmt.Printf("Streaming error: %v\n", err)
+		logging.LogDebug("Streaming error: %v", err)
 		// Error is already handled by the service implementation
 		return
 	}
@@ -297,6 +300,7 @@ func main() {
 		updateCookies = flag.Bool("update-cookies", false, "Update stored cookies")
 		clearCookies  = flag.Bool("clear-cookies", false, "Clear stored cookies")
 		showVersion   = flag.Bool("version", false, "Show version information")
+		verbose       = flag.Bool("verbose", false, "Enable verbose logging output")
 	)
 
 	flag.Usage = func() {
@@ -346,18 +350,30 @@ func main() {
 		// Continue to start the server with new cookies
 	}
 
+	// Set global verbose mode
+	logging.SetVerboseMode(*verbose)
+
 	// Ensure cookies are configured before starting
 	ensureCookiesConfigured()
 
-	handler := NewUnifiedHandler()
+	handler := NewUnifiedHandler(*verbose)
 
 	serverAddr := config.AppConfig.GetServerAddress()
+	
+	// Always show basic startup info
 	fmt.Printf("\n=== LongCat API Wrapper ===\n")
 	fmt.Printf("Starting OpenAI and Claude compatible server on %s\n", serverAddr)
-	fmt.Println("\nEndpoints:")
-	fmt.Println("  POST /v1/chat/completions (OpenAI compatible)")
-	fmt.Println("  POST /v1/messages (Claude compatible)")
-	fmt.Printf("\nServer ready at http://localhost%s\n\n", serverAddr)
+	
+	// Show detailed info only in verbose mode
+	if *verbose {
+		fmt.Println("\nEndpoints:")
+		fmt.Println("  POST /v1/chat/completions (OpenAI compatible)")
+		fmt.Println("  POST /v1/messages (Claude compatible)")
+		fmt.Printf("\nServer ready at http://localhost%s\n\n", serverAddr)
+	} else {
+		fmt.Println(" (Run with --verbose for detailed logging)")
+		fmt.Println()
+	}
 
 	if err := http.ListenAndServe(serverAddr, handler); err != nil {
 		log.Fatalf("Server error: %v", err)
