@@ -42,6 +42,28 @@ OpenAI 和 Claude API 兼容的 LongCat 聊天服务。这允许您将 LongCat �
 go install github.com/JessonChan/longcat-web-api@latest
 ```
 
+安装后，`longcat-web-api` 二进制文件将在您的 Go bin 目录中可用。您可以直接运行它：
+
+```bash
+longcat-web-api
+```
+
+**首次运行设置：**
+如果没有配置 Cookie，系统会提示您提供它们：
+```
+=== 需要 Cookie 配置 ===
+
+获取您的 Cookie：
+1. 在浏览器中打开 https://longcat.chat 并登录
+2. 打开开发者工具 (F12)
+3. 转到应用程序/存储 → Cookie → https://longcat.chat
+4. 找到这些 Cookie 并复制它们的值
+
+在此处粘贴您的 Cookie 并按 Enter：
+> _lxsdk_cuid=xxx; passport_token_key=yyy; _lxsdk_s=zzz
+```
+
+服务器将在默认端口 8082 上启动。
 
 ### 从源代码安装
 ```bash

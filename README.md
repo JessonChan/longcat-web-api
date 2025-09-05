@@ -39,6 +39,29 @@ OpenAI and Claude API compatible wrapper for LongCat Chat service. This allows y
 go install github.com/JessonChan/longcat-web-api@latest
 ```
 
+After installation, the `longcat-web-api` binary will be available in your Go bin directory. You can run it directly:
+
+```bash
+longcat-web-api
+```
+
+**First Run Setup:**
+If no cookies are configured, you'll be prompted to provide them:
+```
+=== Cookie Configuration Required ===
+
+To get your cookies:
+1. Open https://longcat.chat in your browser and login
+2. Open Developer Tools (F12)
+3. Go to Application/Storage → Cookies → https://longcat.chat
+4. Find these cookies and copy their values
+
+Paste your cookies here and press Enter:
+> _lxsdk_cuid=xxx; passport_token_key=yyy; _lxsdk_s=zzz
+```
+
+The server will start on port 8082 by default.
+
 ### From Source
 ```bash
 git clone https://github.com/JessonChan/longcat-web-api.git
