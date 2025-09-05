@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -1313,15 +1315,105 @@ func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request,
 }
 
 func main() {
+	// Parse command-line flags
+	var (
+		updateCookies = flag.Bool("update-cookies", false, "Update stored cookies")
+		clearCookies  = flag.Bool("clear-cookies", false, "Clear stored cookies")
+		showVersion   = flag.Bool("version", false, "Show version information")
+	)
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "LongCat API Wrapper - OpenAI/Claude Compatible API Gateway\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nEnvironment Variables:\n")
+		fmt.Fprintf(os.Stderr, "  COOKIE_PASSPORT_TOKEN  - LongCat authentication token (required)\n")
+		fmt.Fprintf(os.Stderr, "  COOKIE_LXSDK_CUID     - LongCat session cookie\n")
+		fmt.Fprintf(os.Stderr, "  COOKIE_LXSDK_S        - LongCat tracking cookie\n")
+		fmt.Fprintf(os.Stderr, "  SERVER_PORT           - Server port (default: 8082)\n")
+	}
+
+	flag.Parse()
+
+	// Handle special flags
+	if *showVersion {
+		fmt.Println("LongCat API Wrapper v1.0.0")
+		return
+	}
+
+	if *clearCookies {
+		homeDir, _ := os.UserHomeDir()
+		configPath := homeDir + "/.config/longcat-web-api/config.json"
+
+		if err := os.Remove(configPath); err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("No configuration file found")
+			} else {
+				log.Fatalf("Failed to clear configuration: %v", err)
+			}
+		} else {
+			fmt.Println("✓ Configuration cleared successfully")
+		}
+		return
+	}
+
+	if *updateCookies {
+		cookieManager := config.NewCookieManager()
+		cookies, err := cookieManager.PromptForCookies()
+		if err != nil {
+			log.Fatalf("Failed to update cookies: %v", err)
+		}
+		config.AppConfig.Cookies = cookies
+		fmt.Println("✓ Cookies updated successfully")
+		// Continue to start the server with new cookies
+	}
+
+	// Ensure cookies are configured before starting
+	ensureCookiesConfigured()
+
 	handler := NewUnifiedHandler()
 
 	serverAddr := config.AppConfig.GetServerAddress()
+	fmt.Printf("\n=== LongCat API Wrapper ===\n")
 	fmt.Printf("Starting OpenAI and Claude compatible server on %s\n", serverAddr)
-	fmt.Println("Endpoints:")
+	fmt.Println("\nEndpoints:")
 	fmt.Println("  POST /v1/chat/completions (OpenAI compatible)")
 	fmt.Println("  POST /v1/messages (Claude compatible)")
+	fmt.Printf("\nServer ready at http://localhost%s\n\n", serverAddr)
 
 	if err := http.ListenAndServe(serverAddr, handler); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+// ensureCookiesConfigured checks if cookies are available and prompts for them if not
+func ensureCookiesConfigured() {
+	// Check if cookies are already configured
+	if config.AppConfig.Cookies.PassportToken != "" {
+		fmt.Println("✓ Cookies loaded from environment variables")
+		return
+	}
+
+	// Try to load from config file
+	cookieManager := config.NewCookieManager()
+	cookies, err := cookieManager.LoadCookies()
+	if err == nil && cookies.PassportToken != "" {
+		config.AppConfig.Cookies = cookies
+		fmt.Println("✓ Cookies loaded from config file")
+		return
+	}
+
+	// No cookies found, prompt user
+	fmt.Println("\n=== Cookie Configuration Required ===")
+	fmt.Println("\nNo cookies found. Please provide authentication cookies to continue.")
+
+	cookies, err = cookieManager.PromptForCookies()
+	if err != nil {
+		log.Fatalf("Failed to obtain cookies: %v", err)
+	}
+
+	// Update AppConfig with obtained cookies
+	config.AppConfig.Cookies = cookies
+	fmt.Println("✓ Cookies configured successfully")
 }

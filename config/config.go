@@ -51,17 +51,17 @@ func LoadConfig() {
 }
 
 func validateConfig() {
+	// Don't fail immediately if cookies are missing
+	// The main function will handle prompting for cookies
 	if AppConfig.Cookies.LxsdkCuid == "" {
-		log.Println("Warning: COOKIE_LXSDK_CUID is not set")
+		log.Println("Note: COOKIE_LXSDK_CUID is not set")
 	}
 	if AppConfig.Cookies.PassportToken == "" {
-		log.Fatal("Error: COOKIE_PASSPORT_TOKEN is required but not set")
+		log.Println("Note: COOKIE_PASSPORT_TOKEN is not set (will prompt for cookies)")
 	}
 	if AppConfig.Cookies.LxsdkS == "" {
-		log.Println("Warning: COOKIE_LXSDK_S is not set")
+		log.Println("Note: COOKIE_LXSDK_S is not set")
 	}
-	
-	log.Println("Configuration loaded successfully")
 }
 
 func getEnv(key, defaultValue string) string {
