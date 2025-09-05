@@ -143,12 +143,18 @@ func (c *LongCatClient) sendRequest(ctx context.Context, reqUrl string, longCatR
 
 // APIService interface for different API compatibility layers
 type APIService interface {
+	// ProcessRequest sends the request to the underlying service and returns raw HTTP response
 	ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error)
+	
+	// ConvertResponse processes the HTTP response and returns streaming channels for data and errors
 	ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error)
+	
+	// GetResponseContentType returns the appropriate content type for responses
 	GetResponseContentType(stream bool) string
-	NeedsSession(requestBody []byte) bool
-	GetServiceType() APIServiceType
+	
+	// HandleNonStreamingResponse handles non-streaming HTTP responses
 	HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error
+	
+	// HandleStreamingResponse handles streaming HTTP responses using Server-Sent Events
 	HandleStreamingResponse(w http.ResponseWriter, flusher http.Flusher, chunks <-chan interface{}, errs <-chan error) error
-	ConvertRequest(requestBody []byte, conversationID string) (LongCatRequest, error)
 }

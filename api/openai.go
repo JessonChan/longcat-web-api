@@ -277,13 +277,6 @@ func NewOpenAIService(client *LongCatClient) *OpenAIService {
 	}
 }
 
-func (s *OpenAIService) NeedsSession(requestBody []byte) bool {
-	var req ChatCompletionRequest
-	if err := json.Unmarshal(requestBody, &req); err != nil {
-		return false
-	}
-	return len(req.Messages) == 1
-}
 
 func (s *OpenAIService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
 	var req ChatCompletionRequest
@@ -291,7 +284,7 @@ func (s *OpenAIService) ProcessRequest(ctx context.Context, requestBody []byte, 
 		return nil, fmt.Errorf("invalid OpenAI request: %w", err)
 	}
 
-	longCatReq, err := s.ConvertRequest(requestBody, conversationID)
+	longCatReq, err := s.convertRequest(requestBody, conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +292,8 @@ func (s *OpenAIService) ProcessRequest(ctx context.Context, requestBody []byte, 
 	return s.longCatClient.SendRequest(ctx, longCatReq)
 }
 
-func (s *OpenAIService) ConvertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
+// convertRequest converts OpenAI request format to LongCat request format
+func (s *OpenAIService) convertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
 	var openAIReq ChatCompletionRequest
 	if err := json.Unmarshal(requestBody, &openAIReq); err != nil {
 		return LongCatRequest{}, fmt.Errorf("invalid OpenAI request: %w", err)
@@ -373,9 +367,6 @@ func (s *OpenAIService) GetResponseContentType(stream bool) string {
 	return "application/json"
 }
 
-func (s *OpenAIService) GetServiceType() APIServiceType {
-	return OpenAIServiceType
-}
 
 func (s *OpenAIService) HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error {
 	// Collect all chunks and build final response

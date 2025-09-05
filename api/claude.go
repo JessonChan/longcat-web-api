@@ -83,13 +83,6 @@ func NewClaudeService(client *LongCatClient) *ClaudeService {
 	}
 }
 
-func (s *ClaudeService) NeedsSession(requestBody []byte) bool {
-	var req ClaudeAPIRequest
-	if err := json.Unmarshal(requestBody, &req); err != nil {
-		return false
-	}
-	return len(req.Messages) == 1
-}
 
 func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
 	var req ClaudeAPIRequest
@@ -97,7 +90,7 @@ func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte, 
 		return nil, fmt.Errorf("invalid Claude request: %w", err)
 	}
 
-	longCatReq, err := s.ConvertRequest(requestBody, conversationID)
+	longCatReq, err := s.convertRequest(requestBody, conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +98,8 @@ func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte, 
 	return s.longCatClient.SendRequest(ctx, longCatReq)
 }
 
-func (s *ClaudeService) ConvertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
+// convertRequest converts Claude request format to LongCat request format
+func (s *ClaudeService) convertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
 	var claudeReq ClaudeAPIRequest
 	if err := json.Unmarshal(requestBody, &claudeReq); err != nil {
 		return LongCatRequest{}, fmt.Errorf("invalid Claude request: %w", err)
@@ -214,9 +208,6 @@ func (s *ClaudeService) GetResponseContentType(stream bool) string {
 	return "application/json"
 }
 
-func (s *ClaudeService) GetServiceType() APIServiceType {
-	return ClaudeServiceType
-}
 
 func (s *ClaudeService) HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error {
 	var finalResponse *ClaudeAPIResponse
