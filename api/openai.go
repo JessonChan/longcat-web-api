@@ -191,8 +191,27 @@ func (p *StreamProcessor) ProcessStream(resp *http.Response, stream bool) (<-cha
 				chunks <- *chunk
 			}
 
-			// If this is the final chunk, we're done
+			// If this is the final chunk, ensure it's properly handled
 			if longCatResp.LastOne || finishReason == "stop" {
+				// For streaming, send a final chunk with finish reason if not already included
+				if stream && chunk != nil && chunk.Choices[0].FinishReason == "" && finishReason != "" {
+					finalChunk := ChatCompletionChunk{
+						ID:      chunk.ID,
+						Object:  chunk.Object,
+						Created: chunk.Created,
+						Model:   chunk.Model,
+						Choices: []Choice{
+							{
+								Delta: Delta{
+									Content: "",
+								},
+								Index:        0,
+								FinishReason: finishReason,
+							},
+						},
+					}
+					chunks <- finalChunk
+				}
 				if !stream && chunk != nil {
 					chunks <- *chunk
 				}
@@ -229,6 +248,10 @@ func (p *StreamProcessor) convertToOpenAIFormat(longCatResp LongCatResponse, str
 			if len(longCatResp.Content) > len(accumulated) {
 				// New content is everything after what we've already sent
 				content = longCatResp.Content[len(accumulated):]
+			} else if longCatResp.Content != accumulated {
+				// If content is different but not longer, send the difference
+				// This handles cases where the final message might be shorter due to cleanup
+				content = longCatResp.Content
 			}
 		}
 
@@ -259,6 +282,18 @@ func (p *StreamProcessor) convertToOpenAIFormat(longCatResp LongCatResponse, str
 		if content != "" || p.finishReason != "" || role != "" {
 			return chunk
 		}
+		
+		// Special case: if this is the final message and we haven't sent all content yet,
+		// ensure we send the remaining content
+		if longCatResp.LastOne || longCatResp.ContentStatus == "FINISHED" {
+			accumulated := p.accumulated.String()
+			if longCatResp.Content != "" && longCatResp.Content != accumulated {
+				// Send the remaining content as the final chunk
+				chunk.Choices[0].Delta.Content = longCatResp.Content
+				return chunk
+			}
+		}
+		
 		return nil
 	}
 
