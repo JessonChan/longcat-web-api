@@ -1,220 +1,223 @@
-# LongCat API Wrapper
+# LongCat API
 
-[![Go Version](https://img.shields.io/badge/go-1.21+-blue.svg)](https://golang.org)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![中文文档](https://img.shields.io/badge/docs-%E4%B8%AD%E6%96%87-red.svg)](README_CN.md)
+[![Go 版本](https://img.shields.io/badge/go-1.21+-blue.svg)](https://golang.org)
+[![许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![English Docs](https://img.shields.io/badge/docs-English-blue.svg)](README_EN.md)
 
-OpenAI and Claude API compatible wrapper for LongCat Chat service. This allows you to use LongCat with any OpenAI or Claude API compatible client.
+OpenAI 和 Claude API 兼容的 LongCat 聊天服务。这允许您将 LongCat 与任何 OpenAI 或 Claude API 兼容的客户端一起使用。
 
-**📖 [中文版本](README_CN.md) | [English Version](README.md)**
+**📖 [中文版本](README.md) | [English Version](README_EN.md)**
 
-## 🚀 Features
+## 🚀 功能特性
 
-- ✅ OpenAI API compatibility (`/v1/chat/completions`)
-- ✅ Claude API compatibility (`/v1/messages`)
-- ✅ Streaming and non-streaming responses
-- ✅ Conversation history management
-- ✅ Interactive cookie configuration
-- ✅ Secure cookie storage
-- ✅ CORS support for web applications
-- ✅ Verbose logging mode
+- ✅ OpenAI API 兼容性 (`/v1/chat/completions`)
+- ✅ Claude API 兼容性 (`/v1/messages`)
+- ✅ 流式和非流式响应
+- ✅ 对话历史管理
+- ✅ 交互式 Cookie 配置
+- ✅ 安全的 Cookie 存储
+- ✅ Web 应用程序的 CORS 支持
+- ✅ 详细日志模式
 
-## 📋 Table of Contents
+## 📋 目录
 
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [API Usage](#api-usage)
-- [Developer Guide](#developer-guide)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+- [快速开始](#快速开始)
+- [安装](#安装)
+- [配置](#配置)
+- [API 使用](#api-使用)
+- [开发者指南](#开发者指南)
+- [故障排除](#故障排除)
+- [贡献](#贡献)
+- [许可证](#许可证)
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-## 📦 Installation
 
-### Using Go Install
+### 前置要求
+- Go 1.21 或更高版本
+- LongCat 聊天账户
+
+## 📦 安装
+
+
+### 使用 Go Install
 ```bash
 go install github.com/JessonChan/longcat-web-api@latest
 ```
 
-After installation, the `longcat-web-api` binary will be available in your Go bin directory. You can run it directly:
+安装后，`longcat-web-api` 二进制文件将在您的 Go bin 目录中可用。您可以直接运行它：
 
 ```bash
 longcat-web-api
 ```
 
-**First Run Setup:**
-If no cookies are configured, you'll be prompted to provide them:
+**首次运行设置：**
+如果没有配置 Cookie，系统会提示您提供它们：
 ```
-=== Cookie Configuration Required ===
+=== 需要 Cookie 配置 ===
 
-To get your cookies:
-1. Open https://longcat.chat in your browser and login
-2. Open Developer Tools (F12)
-3. Go to Application/Storage → Cookies → https://longcat.chat
-4. Find these cookies and copy their values
+获取您的 Cookie：
+1. 在浏览器中打开 https://longcat.chat 并登录
+2. 打开开发者工具 (F12)
+3. 转到应用程序/存储 → Cookie → https://longcat.chat
+4. 找到这些 Cookie 并复制它们的值
 
-Paste your cookies here and press Enter:
+在此处粘贴您的 Cookie 并按 Enter：
 > _lxsdk_cuid=xxx; passport_token_key=yyy; _lxsdk_s=zzz
 ```
 
-The server will start on port 8082 by default.
+服务器将在默认端口 8082 上启动。
 
-## 🤖 Client Configuration
+## 🤖 客户端配置
 
-### DeepChat Configuration
+### DeepChat 配置
 
-1. **Open DeepChat**
-2. **Go to Settings → Providers**
-3. **Add Custom Provider:**
-   - **Provider Name:** `LongCat API`
-   - **API Key:** `any-code` (or any text you want)
-   - **Base URL:** `http://localhost:8082/v1`
-   - **Model:** `gpt-4` (or any model name)
-4. **Save and select the LongCat API provider**
+1. **打开 DeepChat**
+2. **前往 设置 → 提供商**
+3. **添加自定义提供商：**
+   - **提供商名称：** `LongCat API`
+   - **API 密钥：** `any-code` (或任何您想要的文本)
+   - **基础 URL：** `http://localhost:8082/v1`
+   - **模型：** `gpt-4` (或任何模型名称)
+4. **保存并选择 LongCat API 提供商**
 
-### CherryStudio Configuration
+### CherryStudio 配置
 
-1. **Open CherryStudio**
-2. **Go to Settings → API Keys**
-3. **Add Custom API Configuration:**
-   - **API Name:** `LongCat API`
-   - **API Key:** `any-code` (required, but can be any text)
-   - **API URL:** `http://localhost:8082/v1`
-   - **Model:** `gpt-4`
-4. **Save and select the LongCat API configuration**
+1. **打开 CherryStudio**
+2. **前往 设置 → API 密钥**
+3. **添加自定义 API 配置：**
+   - **API 名称：** `LongCat API`
+   - **API 密钥：** `any-code` (必需，但可以是任何文本)
+   - **API URL：** `http://localhost:8082/v1`
+   - **模型：** `gpt-4`
+4. **保存并选择 LongCat API 配置**
 
-### Other OpenAI-Compatible Clients
+### 其他 OpenAI 兼容客户端
 
-For any OpenAI-compatible client, use these settings:
-- **API Key:** `any-code` (not validated, but required by most clients)
-- **Base URL:** `http://localhost:8082/v1`
-- **Model:** `gpt-4` (or any model name you prefer)
+对于任何 OpenAI 兼容的客户端，使用以下设置：
+- **API 密钥：** `any-code` (不验证，但大多数客户端需要)
+- **基础 URL：** `http://localhost:8082/v1`
+- **模型：** `gpt-4` (或您喜欢的任何模型名称)
 
 
-### From Source
+### 从源代码安装
 ```bash
 git clone https://github.com/JessonChan/longcat-web-api.git
 cd longcat-web-api
 go build -o longcat-web-api
 ```
 
-### Prerequisites
-- Go 1.21 or higher
-- LongCat Chat account
 
-### 1. Build the application
+### 1. 构建应用程序
 ```bash
 go build -o longcat-web-api
 ```
 
-### 2. Run the server
+### 2. 运行服务器
 ```bash
 ./longcat-web-api
 ```
 
-**First Run Setup:**
-On first run, if no cookies are configured, you'll be prompted to provide them:
+**首次运行设置：**
+首次运行时，如果没有配置 Cookie，系统会提示您提供它们：
 ```
-=== Cookie Configuration Required ===
+=== 需要 Cookie 配置 ===
 
-To get your cookies:
-1. Open https://longcat.chat in your browser and login
-2. Open Developer Tools (F12)
-3. Go to Application/Storage → Cookies → https://longcat.chat
-4. Find these cookies and copy their values
+获取您的 Cookie：
+1. 在浏览器中打开 https://longcat.chat 并登录
+2. 打开开发者工具 (F12)
+3. 转到应用程序/存储 → Cookie → https://longcat.chat
+4. 找到这些 Cookie 并复制它们的值
 
-Paste your cookies here and press Enter:
+在此处粘贴您的 Cookie 并按 Enter：
 > _lxsdk_cuid=xxx; passport_token_key=yyy; _lxsdk_s=zzz
 ```
 
-The server will start on port 8082 by default.
+服务器将在默认端口 8082 上启动。
 
 
-## ⚙️ Configuration
+## ⚙️ 配置
 
-### Cookie Configuration
+### Cookie 配置
 
-#### Method 1: Interactive Setup (Recommended)
-Simply run the application and paste your cookies when prompted. They'll be saved securely for future use.
+#### 方法 1：交互式设置（推荐）
+只需运行应用程序并在提示时粘贴您的 Cookie。它们将被安全保存以供将来使用。
 
-#### Method 2: Environment Variables
-Set these in your `.env` file or environment:
+#### 方法 2：环境变量
+在您的 `.env` 文件或环境中设置：
 ```bash
 COOKIE_LXSDK_CUID=your_cuid_value
-COOKIE_PASSPORT_TOKEN=your_token_value  # Required
+COOKIE_PASSPORT_TOKEN=your_token_value  # 必需
 COOKIE_LXSDK_S=your_s_value
 ```
 
-#### Method 3: Saved Configuration
-Cookies are automatically saved to `~/.config/longcat-web-api/config.json` when you choose to save them during interactive setup.
+#### 方法 3：保存的配置
+当您在交互式设置期间选择保存 Cookie 时，Cookie 会自动保存到 `~/.config/longcat-web-api/config.json`。
 
-### Environment Variables
+### 环境变量
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SERVER_PORT` | Server port | 8082 |
-| `LONGCAT_API_URL` | LongCat API endpoint | (built-in) |
-| `TIMEOUT_SECONDS` | Request timeout | 30 |
-| `COOKIE_LXSDK_CUID` | LongCat session cookie | - |
-| `COOKIE_PASSPORT_TOKEN` | LongCat auth token (required) | - |
-| `COOKIE_LXSDK_S` | LongCat tracking cookie | - |
+| 变量 | 描述 | 默认值 |
+|------|------|--------|
+| `SERVER_PORT` | 服务器端口 | 8082 |
+| `LONGCAT_API_URL` | LongCat API 端点 | (内置) |
+| `TIMEOUT_SECONDS` | 请求超时 | 30 |
+| `COOKIE_LXSDK_CUID` | LongCat 会话 Cookie | - |
+| `COOKIE_PASSPORT_TOKEN` | LongCat 认证令牌（必需） | - |
+| `COOKIE_LXSDK_S` | LongCat 跟踪 Cookie | - |
 
-## 🛠️ Command-Line Options
+## 🛠️ 命令行选项
 
 ```bash
-# Show help
+# 显示帮助
 ./longcat-web-api -h
 
-# Update stored cookies
+# 更新存储的 Cookie
 ./longcat-web-api -update-cookies
 
-# Clear stored cookies
+# 清除存储的 Cookie
 ./longcat-web-api -clear-cookies
 
-# Show version
+# 显示版本
 ./longcat-web-api -version
 
-# Enable verbose logging
+# 启用详细日志
 ./longcat-web-api -verbose
 ```
 
-## 🔌 API Usage
+## 🔌 API 使用
 
-### OpenAI Compatible API
+### OpenAI 兼容 API
 
-#### Basic Chat Completion
+#### 基本聊天完成
 ```bash
 curl http://localhost:8082/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
     "messages": [
-      {"role": "user", "content": "Hello! How are you?"}
+      {"role": "user", "content": "你好！你好吗？"}
     ],
     "stream": false
   }'
 ```
 
-#### Streaming Response
+#### 流式响应
 ```bash
 curl http://localhost:8082/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
     "messages": [
-      {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "Explain quantum computing in simple terms."}
+      {"role": "system", "content": "你是一个有帮助的助手。"},
+      {"role": "user", "content": "用简单的术语解释量子计算。"}
     ],
     "stream": true
   }'
 ```
 
-### Claude Compatible API
+### Claude 兼容 API
 
-#### Basic Message
+#### 基本消息
 ```bash
 curl http://localhost:8082/v1/messages \
   -H "Content-Type: application/json" \
@@ -223,12 +226,12 @@ curl http://localhost:8082/v1/messages \
     "model": "claude-3",
     "max_tokens": 1000,
     "messages": [
-      {"role": "user", "content": "Hello! How are you?"}
+      {"role": "user", "content": "你好！你好吗？"}
     ]
   }'
 ```
 
-#### With System Message
+#### 带系统消息
 ```bash
 curl http://localhost:8082/v1/messages \
   -H "Content-Type: application/json" \
@@ -236,38 +239,38 @@ curl http://localhost:8082/v1/messages \
   -d '{
     "model": "claude-3",
     "max_tokens": 1000,
-    "system": "You are a helpful assistant that responds in a friendly tone.",
+    "system": "你是一个以友好语气回答的有帮助的助手。",
     "messages": [
-      {"role": "user", "content": "What is the meaning of life?"}
+      {"role": "user", "content": "生命的意义是什么？"}
     ],
     "stream": true
   }'
 ```
 
-### Python Client Example
+### Python 客户端示例
 
 ```python
 import openai
 
-# Configure OpenAI client to use LongCat wrapper
+# 配置 OpenAI 客户端以使用 LongCat 包装器
 client = openai.OpenAI(
-    api_key="not-needed",  # No API key required for local wrapper
+    api_key="not-needed",  # 本地包装器不需要 API 密钥
     base_url="http://localhost:8082/v1"
 )
 
-# Non-streaming chat completion
+# 非流式聊天完成
 response = client.chat.completions.create(
     model="gpt-4",
     messages=[
-        {"role": "user", "content": "Hello! Can you help me with Go programming?"}
+        {"role": "user", "content": "你好！你能帮我学习 Go 编程吗？"}
     ]
 )
 print(response.choices[0].message.content)
 
-# Streaming chat completion
+# 流式聊天完成
 stream = client.chat.completions.create(
     model="gpt-4",
-    messages=[{"role": "user", "content": "Tell me a story"}],
+    messages=[{"role": "user", "content": "给我讲个故事"}],
     stream=True
 )
 for chunk in stream:
@@ -275,21 +278,21 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-### JavaScript/Node.js Example
+### JavaScript/Node.js 示例
 
 ```javascript
 const OpenAI = require('openai');
 
 const openai = new OpenAI({
   baseURL: 'http://localhost:8082/v1',
-  apiKey: 'not-needed' // No API key required for local wrapper
+  apiKey: 'not-needed' // 本地包装器不需要 API 密钥
 });
 
 async function chat() {
   const completion = await openai.chat.completions.create({
     model: 'gpt-4',
     messages: [
-      { role: 'user', content: 'Hello! How can you help me?' }
+      { role: 'user', content: '你好！你怎么能帮助我？' }
     ]
   });
   
@@ -299,156 +302,156 @@ async function chat() {
 chat();
 ```
 
-## 🔑 Getting Cookies from Browser
+## 🔑 从浏览器获取 Cookie
 
-1. Open https://longcat.chat and login
-2. Open Developer Tools (F12)
-3. Go to Application tab → Storage → Cookies
-4. Find and copy these cookie values:
+1. 打开 https://longcat.chat 并登录
+2. 打开开发者工具 (F12)
+3. 转到应用程序选项卡 → 存储 → Cookie
+4. 查找并复制这些 Cookie 值：
    - `_lxsdk_cuid`
-   - `passport_token_key` (required)
+   - `passport_token_key`（必需）
    - `_lxsdk_s`
 
-You can copy them individually or as a complete cookie string.
+您可以单独复制它们或作为完整的 Cookie 字符串复制。
 
-## 👨‍💻 Developer Guide
+## 👨‍💻 开发者指南
 
-### Project Structure
+### 项目结构
 
 ```
 longcat-web-api/
-├── main.go                 # Main application entry point
-├── api/                    # API service implementations
-│   ├── openai.go          # OpenAI API compatibility
-│   ├── claude.go          # Claude API compatibility
-│   └── client.go          # LongCat API client
-├── config/                # Configuration management
-├── types/                 # Type definitions
-├── conversation/          # Conversation management
-└── logging/              # Logging utilities
+├── main.go                 # 主应用程序入口点
+├── api/                    # API 服务实现
+│   ├── openai.go          # OpenAI API 兼容性
+│   ├── claude.go          # Claude API 兼容性
+│   └── client.go          # LongCat API 客户端
+├── config/                # 配置管理
+├── types/                 # 类型定义
+├── conversation/          # 对话管理
+└── logging/              # 日志工具
 ```
 
-### Development Setup
+### 开发设置
 
-1. **Clone the repository:**
+1. **克隆仓库：**
    ```bash
    git clone https://github.com/JessonChan/longcat-web-api.git
    cd longcat-web-api
    ```
 
-2. **Install dependencies:**
+2. **安装依赖：**
    ```bash
    go mod tidy
    ```
 
-3. **Run in development mode:**
+3. **在开发模式下运行：**
    ```bash
    go run main.go -verbose
    ```
 
-### Building
+### 构建
 
 ```bash
-# Build for current platform
+# 为当前平台构建
 go build -o longcat-web-api
 
-# Build for multiple platforms
+# 为多个平台构建
 make build-all
 ```
 
-### Testing
+### 测试
 
 ```bash
-# Run all tests
+# 运行所有测试
 go test ./...
 
-# Run tests with verbose output
+# 运行详细输出的测试
 go test -v ./...
 
-# Run tests with coverage
+# 运行覆盖率测试
 go test -cover ./...
 ```
 
-### Contributing
+### 贡献
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+1. Fork 仓库
+2. 创建功能分支：`git checkout -b feature/amazing-feature`
+3. 提交您的更改：`git commit -m 'Add amazing feature'`
+4. 推送到分支：`git push origin feature/amazing-feature`
+5. 打开 Pull Request
 
-#### Code Style
+#### 代码风格
 
-- Follow Go standard formatting (`go fmt`)
-- Use conventional commits
-- Add tests for new features
-- Update documentation as needed
+- 遵循 Go 标准格式化 (`go fmt`)
+- 使用约定式提交
+- 为新功能添加测试
+- 根据需要更新文档
 
-## 🚨 Troubleshooting
+## 🚨 故障排除
 
-### Common Issues
+### 常见问题
 
-#### Authentication Failed
-**Error:** `Failed to authenticate with LongCat`
+#### 认证失败
+**错误：** `Failed to authenticate with LongCat`
 
-**Solutions:**
-1. Update your cookies: `./longcat-web-api -update-cookies`
-2. Ensure cookies haven't expired (re-login to LongCat if needed)
-3. Verify you're copying the complete cookie values
-4. Check that the config file has proper permissions
+**解决方案：**
+1. 更新您的 Cookie：`./longcat-web-api -update-cookies`
+2. 确保 Cookie 没有过期（如果需要，重新登录 LongCat）
+3. 验证您是否复制了完整的 Cookie 值
+4. 检查配置文件是否具有适当的权限
 
-#### Port Already in Use
-**Error:** `bind: address already in use`
+#### 端口已被占用
+**错误：** `bind: address already in use`
 
-**Solutions:**
-1. Change the port: `export SERVER_PORT=8083`
-2. Kill the process using the port: `lsof -ti:8082 | xargs kill -9`
+**解决方案：**
+1. 更改端口：`export SERVER_PORT=8083`
+2. 杀死使用该端口的进程：`lsof -ti:8082 | xargs kill -9`
 
-#### Build Errors
-**Error:** Various Go compilation errors
+#### 构建错误
+**错误：** 各种 Go 编译错误
 
-**Solutions:**
-1. Ensure you have Go 1.21 or higher: `go version`
-2. Clean and rebuild: `go clean && go build`
-3. Update dependencies: `go mod tidy`
+**解决方案：**
+1. 确保您有 Go 1.21 或更高版本：`go version`
+2. 清理并重新构建：`go clean && go build`
+3. 更新依赖：`go mod tidy`
 
-#### Cookie Configuration Issues
-**Error:** No cookies found or invalid cookies
+#### Cookie 配置问题
+**错误：** 未找到 Cookie 或 Cookie 无效
 
-**Solutions:**
-1. Clear saved cookies: `./longcat-web-api -clear-cookies`
-2. Reconfigure cookies: `./longcat-web-api -update-cookies`
-3. Check environment variables are set correctly
+**解决方案：**
+1. 清除保存的 Cookie：`./longcat-web-api -clear-cookies`
+2. 重新配置 Cookie：`./longcat-web-api -update-cookies`
+3. 检查环境变量是否设置正确
 
-### FAQ
+### 常见问题
 
-**Q: Do I need an API key?**
-A: No, you just need your LongCat session cookies from the browser.
+**问：我需要 API 密钥吗？**
+答：不需要，您只需要来自浏览器的 LongCat 会话 Cookie。
 
-**Q: Can I use this with any OpenAI/Claude client?**
-A: Yes, it's compatible with any client that supports OpenAI or Claude API formats.
+**问：我可以将此与任何 OpenAI/Claude 客户端一起使用吗？**
+答：是的，它与任何支持 OpenAI 或 Claude API 格式的客户端兼容。
 
-**Q: How do I update my cookies when they expire?**
-A: Run `./longcat-web-api -update-cookies` and provide new cookies from your browser.
+**问：当我的 Cookie 过期时如何更新？**
+答：运行 `./longcat-web-api -update-cookies` 并从浏览器提供新的 Cookie。
 
-**Q: Is my conversation history saved?**
-A: Conversation history is managed in-memory only during the server session.
+**问：我的对话历史会被保存吗？**
+答：对话历史仅在服务器会话期间在内存中管理。
 
-**Q: Can I run this on a different port?**
-A: Yes, set the `SERVER_PORT` environment variable: `export SERVER_PORT=3000`
+**问：我可以在不同的端口上运行吗？**
+答：是的，设置 `SERVER_PORT` 环境变量：`export SERVER_PORT=3000`
 
-## 🔒 Security Notes
+## 🔒 安全说明
 
-- Cookies are stored with 0600 permissions (owner read/write only)
-- Cookie values are masked when displayed
-- The `passport_token_key` is required for authentication
-- Keep your cookies secure and don't share them
-- The server runs locally by default - be cautious when exposing it to networks
+- Cookie 以 0600 权限存储（仅所有者读/写）
+- Cookie 值在显示时被屏蔽
+- `passport_token_key` 是认证所必需的
+- 保护您的 Cookie 安全，不要分享它们
+- 服务器默认在本地运行 - 在向网络公开时请谨慎
 
-## 🤝 Contributing
+## 🤝 贡献
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+欢迎贡献！请随时提交 Pull Request。对于重大更改，请先打开 Issue 讨论您想要更改的内容。
 
-## 📄 License
+## 📄 许可证
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+本项目采用 MIT 许可证 - 详情请参见 [LICENSE](LICENSE) 文件。
