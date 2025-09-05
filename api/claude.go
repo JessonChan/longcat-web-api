@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 	"github.com/google/uuid"
 )
@@ -38,6 +39,7 @@ type ClaudeAPIResponse struct {
 	StopReason   string                  `json:"stop_reason,omitempty"`
 	StopSequence *string                 `json:"stop_sequence,omitempty"`
 	Usage        ClaudeUsage             `json:"usage"`
+	Container    *ClaudeContainer        `json:"container,omitempty"`
 }
 
 type ClaudeResponseContent struct {
@@ -46,8 +48,21 @@ type ClaudeResponseContent struct {
 }
 
 type ClaudeUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int                     `json:"input_tokens"`
+	OutputTokens             int                     `json:"output_tokens"`
+	CacheCreationInputTokens *int                    `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     *int                    `json:"cache_read_input_tokens,omitempty"`
+	ServiceTier              *string                 `json:"service_tier,omitempty"`
+	ServerToolUse            *ClaudeServerToolUse    `json:"server_tool_use,omitempty"`
+}
+
+type ClaudeServerToolUse struct {
+	WebSearchRequests int `json:"web_search_requests"`
+}
+
+type ClaudeContainer struct {
+	ID        string    `json:"id"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // Claude streaming response
@@ -58,18 +73,28 @@ type ClaudeStreamChunk struct {
 	Message      *ClaudeAPIResponse  `json:"message,omitempty"`
 	Usage        *ClaudeUsage        `json:"usage,omitempty"`
 	ContentBlock *ClaudeContentBlock `json:"content_block,omitempty"`
+	MessageDelta *ClaudeMessageDelta `json:"message_delta,omitempty"`
 }
 
 type ClaudeStreamDelta struct {
-	Type         string  `json:"type"`
-	Text         string  `json:"text,omitempty"`
-	StopReason   string  `json:"stop_reason,omitempty"`
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+type ClaudeMessageDelta struct {
+	Type         string      `json:"type"`
+	Delta        ClaudeDelta `json:"delta"`
+	Usage        ClaudeUsage `json:"usage"`
+}
+
+type ClaudeDelta struct {
+	StopReason   *string `json:"stop_reason,omitempty"`
 	StopSequence *string `json:"stop_sequence,omitempty"`
 }
 
 type ClaudeContentBlock struct {
 	Type string `json:"type"`
-	Text string `json:"text"`
+	Text string `json:"text,omitempty"`
 }
 
 // ClaudeService implements APIService for Claude compatibility
@@ -176,29 +201,55 @@ func (s *ClaudeService) convertOpenAIToClaudeChunk(openAIChunk ChatCompletionChu
 		return nil
 	}
 
-	// Convert OpenAI chunk to Claude format
-	if openAIChunk.Choices[0].Delta.Content != "" {
+	choice := openAIChunk.Choices[0]
+
+	// Handle content delta
+	if choice.Delta.Content != "" {
 		return ClaudeStreamChunk{
 			Type:  "content_block_delta",
 			Index: 0,
 			Delta: &ClaudeStreamDelta{
 				Type: "text_delta",
-				Text: openAIChunk.Choices[0].Delta.Content,
+				Text: choice.Delta.Content,
 			},
 		}
 	}
 
-	if openAIChunk.Choices[0].FinishReason != "" {
+	// Handle final message with proper Claude stop reason
+	if choice.FinishReason != "" {
+		stopReason := s.mapToClaudeStopReason(choice.FinishReason)
+		
+		// Create message delta with final usage and stop reason
 		return ClaudeStreamChunk{
-			Type: "message_stop",
-			Usage: &ClaudeUsage{
-				InputTokens:  processor.tokenInfo.PromptTokens,
-				OutputTokens: processor.tokenInfo.CompletionTokens,
+			Type: "message_delta",
+			MessageDelta: &ClaudeMessageDelta{
+				Type: "message_delta",
+				Delta: ClaudeDelta{
+					StopReason: &stopReason,
+				},
+				Usage: ClaudeUsage{
+					InputTokens:  processor.tokenInfo.PromptTokens,
+					OutputTokens: processor.tokenInfo.CompletionTokens,
+				},
 			},
 		}
 	}
 
 	return nil
+}
+
+// mapToClaudeStopReason maps OpenAI finish reasons to Claude stop reasons
+func (s *ClaudeService) mapToClaudeStopReason(openAIReason string) string {
+	switch openAIReason {
+	case "stop":
+		return "end_turn"
+	case "length":
+		return "max_tokens"
+	case "content_filter":
+		return "refusal"
+	default:
+		return "end_turn"
+	}
 }
 
 func (s *ClaudeService) GetResponseContentType(stream bool) string {
@@ -210,38 +261,46 @@ func (s *ClaudeService) GetResponseContentType(stream bool) string {
 
 
 func (s *ClaudeService) HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error {
-	var finalResponse *ClaudeAPIResponse
+	var fullContent strings.Builder
+	var finalStopReason string
+	var inputTokens, outputTokens int
+	messageID := uuid.New().String()
 
 	// Process all chunks
 	for {
 		select {
 		case chunk, ok := <-chunks:
 			if !ok {
-				if finalResponse == nil {
-					// Create default response if no chunks received
-					finalResponse = &ClaudeAPIResponse{
-						ID:   uuid.New().String(),
-						Type: "message",
-						Role: "assistant",
-						Content: []ClaudeResponseContent{{
-							Type: "text",
-							Text: "I apologize, but I'm unable to process your request at the moment.",
-						}},
-						Model:      "LongCat-Flash",
-						StopReason: "end_turn",
-						Usage: ClaudeUsage{
-							InputTokens:  0,
-							OutputTokens: 0,
-						},
-					}
+				// Build final response with proper Claude format
+				response := &ClaudeAPIResponse{
+					ID:   messageID,
+					Type: "message",
+					Role: "assistant",
+					Content: []ClaudeResponseContent{{
+						Type: "text",
+						Text: fullContent.String(),
+					}},
+					Model:      "LongCat-Flash",
+					StopReason: finalStopReason,
+					Usage: ClaudeUsage{
+						InputTokens:  inputTokens,
+						OutputTokens: outputTokens,
+					},
 				}
 
 				w.Header().Set("Content-Type", "application/json")
-				return json.NewEncoder(w).Encode(finalResponse)
+				return json.NewEncoder(w).Encode(response)
 			}
 
-			if claudeResp, ok := chunk.(*ClaudeAPIResponse); ok {
-				finalResponse = claudeResp
+			if openAIChunk, ok := chunk.(ChatCompletionChunk); ok {
+				if openAIChunk.Choices != nil && len(openAIChunk.Choices) > 0 {
+					fullContent.WriteString(openAIChunk.Choices[0].Delta.Content)
+					if openAIChunk.Choices[0].FinishReason != "" {
+						finalStopReason = s.mapToClaudeStopReason(openAIChunk.Choices[0].FinishReason)
+					}
+				}
+				// Extract token info from processor if available
+				// Note: This would need to be passed through the chunk or accessed differently
 			}
 
 		case err := <-errs:
@@ -253,138 +312,203 @@ func (s *ClaudeService) HandleNonStreamingResponse(w http.ResponseWriter, chunks
 }
 
 func (s *ClaudeService) HandleStreamingResponse(w http.ResponseWriter, flusher http.Flusher, chunks <-chan interface{}, errs <-chan error) error {
-	hasReceivedContent := false
+	messageID := uuid.New().String()
 	sentMessageStart := false
 	sentContentBlockStart := false
+	sentMessageDelta := false
+	hasReceivedContent := false
+	var inputTokens, outputTokens int
 
 	for {
 		select {
 		case chunk, ok := <-chunks:
 			if !ok {
 				if !hasReceivedContent {
-					// Send complete sequence if no content was received
-					defaultEvents := []ClaudeStreamChunk{
-						{
-							Type: "message_start",
-							Message: &ClaudeAPIResponse{
-								ID:      uuid.New().String(),
-								Type:    "message",
-								Role:    "assistant",
-								Content: []ClaudeResponseContent{},
-								Model:   "LongCat-Flash",
-								Usage:   ClaudeUsage{InputTokens: 0, OutputTokens: 0},
-							},
-						},
-						{
-							Type:  "content_block_start",
-							Index: 0,
-							ContentBlock: &ClaudeContentBlock{
-								Type: "text",
-								Text: "",
-							},
-						},
-						{
-							Type:  "content_block_delta",
-							Index: 0,
-							Delta: &ClaudeStreamDelta{
-								Type: "text_delta",
-								Text: "I apologize, but I'm unable to process your request at the moment.",
-							},
-						},
-						{
-							Type:  "content_block_stop",
-							Index: 0,
-						},
-						{
-							Type: "message_stop",
-							Usage: &ClaudeUsage{
-								InputTokens:  0,
-								OutputTokens: 0,
-							},
-						},
-					}
-
-					for _, event := range defaultEvents {
-						if data, err := json.Marshal(event); err == nil {
-							fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
-							flusher.Flush()
-						}
-					}
+					// Send complete default sequence if no content was received
+					s.sendDefaultSequence(w, flusher, messageID)
 					return nil
 				}
 
 				// Send final message_stop if not already sent
-				stopEvent := ClaudeStreamChunk{
-					Type: "message_stop",
+				if !sentMessageDelta {
+					s.sendMessageDelta(w, flusher, messageID, "end_turn", inputTokens, outputTokens)
+					sentMessageDelta = true
 				}
-				if data, err := json.Marshal(stopEvent); err == nil {
-					fmt.Fprintf(w, "event: message_stop\ndata: %s\n\n", data)
-					flusher.Flush()
-				}
+				
+				s.sendMessageStop(w, flusher)
 				return nil
 			}
 
 			hasReceivedContent = true
 
-			// Handle different chunk types
 			if claudeChunk, ok := chunk.(ClaudeStreamChunk); ok {
-				// Send message_start if not already sent
-				if !sentMessageStart && claudeChunk.Type == "content_block_delta" {
-					msgStart := ClaudeStreamChunk{
-						Type: "message_start",
-						Message: &ClaudeAPIResponse{
-							ID:      uuid.New().String(),
-							Type:    "message",
-							Role:    "assistant",
-							Content: []ClaudeResponseContent{},
-							Model:   "LongCat-Flash",
-							Usage:   ClaudeUsage{},
-						},
+				switch claudeChunk.Type {
+				case "content_block_delta":
+					// Send message_start if not already sent
+					if !sentMessageStart {
+						s.sendMessageStart(w, flusher, messageID, 0, 0)
+						sentMessageStart = true
 					}
-					if data, err := json.Marshal(msgStart); err == nil {
-						fmt.Fprintf(w, "event: message_start\ndata: %s\n\n", data)
+
+					// Send content_block_start if not already sent
+					if !sentContentBlockStart {
+						s.sendContentBlockStart(w, flusher)
+						sentContentBlockStart = true
+					}
+
+					// Send the content delta
+					if data, err := json.Marshal(claudeChunk); err == nil {
+						fmt.Fprintf(w, "event: %s\ndata: %s\n\n", claudeChunk.Type, data)
 						flusher.Flush()
 					}
-					sentMessageStart = true
-				}
 
-				// Send content_block_start if not already sent
-				if !sentContentBlockStart && claudeChunk.Type == "content_block_delta" {
-					blockStart := ClaudeStreamChunk{
-						Type:  "content_block_start",
-						Index: 0,
-						ContentBlock: &ClaudeContentBlock{
-							Type: "text",
-							Text: "",
-						},
+				case "message_delta":
+					// Send message_start if not already sent
+					if !sentMessageStart {
+						s.sendMessageStart(w, flusher, messageID, 
+							claudeChunk.MessageDelta.Usage.InputTokens, 
+							claudeChunk.MessageDelta.Usage.OutputTokens)
+						sentMessageStart = true
 					}
-					if data, err := json.Marshal(blockStart); err == nil {
-						fmt.Fprintf(w, "event: content_block_start\ndata: %s\n\n", data)
+
+					// Send content_block_start if not already sent
+					if !sentContentBlockStart {
+						s.sendContentBlockStart(w, flusher)
+						sentContentBlockStart = true
+					}
+
+					// Send content_block_stop before message_delta
+					s.sendContentBlockStop(w, flusher)
+
+					// Send message_delta with final usage
+					if data, err := json.Marshal(claudeChunk); err == nil {
+						fmt.Fprintf(w, "event: %s\ndata: %s\n\n", claudeChunk.Type, data)
 						flusher.Flush()
 					}
-					sentContentBlockStart = true
-				}
-
-				// Send the actual chunk
-				if data, err := json.Marshal(claudeChunk); err == nil {
-					fmt.Fprintf(w, "event: %s\ndata: %s\n\n", claudeChunk.Type, data)
-					flusher.Flush()
+					
+					sentMessageDelta = true
+					inputTokens = claudeChunk.MessageDelta.Usage.InputTokens
+					outputTokens = claudeChunk.MessageDelta.Usage.OutputTokens
 				}
 			}
 
 		case err := <-errs:
 			if err != nil {
-				// Send error as SSE event
-				errorEvent := map[string]interface{}{
-					"type":  "error",
-					"error": err.Error(),
-				}
-				if data, jsonErr := json.Marshal(errorEvent); jsonErr == nil {
-					fmt.Fprintf(w, "event: error\ndata: %s\n\n", data)
-					flusher.Flush()
-				}
+				s.sendErrorEvent(w, flusher, err)
 				return err
 			}
 		}
+	}
+}
+
+// Helper methods for Claude streaming events
+func (s *ClaudeService) sendMessageStart(w http.ResponseWriter, flusher http.Flusher, messageID string, inputTokens, outputTokens int) {
+	msgStart := ClaudeStreamChunk{
+		Type: "message_start",
+		Message: &ClaudeAPIResponse{
+			ID:      messageID,
+			Type:    "message",
+			Role:    "assistant",
+			Content: []ClaudeResponseContent{},
+			Model:   "LongCat-Flash",
+			Usage: ClaudeUsage{
+				InputTokens:  inputTokens,
+				OutputTokens: outputTokens,
+			},
+		},
+	}
+	if data, err := json.Marshal(msgStart); err == nil {
+		fmt.Fprintf(w, "event: message_start\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+}
+
+func (s *ClaudeService) sendContentBlockStart(w http.ResponseWriter, flusher http.Flusher) {
+	blockStart := ClaudeStreamChunk{
+		Type:  "content_block_start",
+		Index: 0,
+		ContentBlock: &ClaudeContentBlock{
+			Type: "text",
+		},
+	}
+	if data, err := json.Marshal(blockStart); err == nil {
+		fmt.Fprintf(w, "event: content_block_start\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+}
+
+func (s *ClaudeService) sendContentBlockStop(w http.ResponseWriter, flusher http.Flusher) {
+	blockStop := ClaudeStreamChunk{
+		Type:  "content_block_stop",
+		Index: 0,
+	}
+	if data, err := json.Marshal(blockStop); err == nil {
+		fmt.Fprintf(w, "event: content_block_stop\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+}
+
+func (s *ClaudeService) sendMessageDelta(w http.ResponseWriter, flusher http.Flusher, messageID string, stopReason string, inputTokens, outputTokens int) {
+	msgDelta := ClaudeStreamChunk{
+		Type: "message_delta",
+		MessageDelta: &ClaudeMessageDelta{
+			Type: "message_delta",
+			Delta: ClaudeDelta{
+				StopReason: &stopReason,
+			},
+			Usage: ClaudeUsage{
+				InputTokens:  inputTokens,
+				OutputTokens: outputTokens,
+			},
+		},
+	}
+	if data, err := json.Marshal(msgDelta); err == nil {
+		fmt.Fprintf(w, "event: message_delta\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+}
+
+func (s *ClaudeService) sendMessageStop(w http.ResponseWriter, flusher http.Flusher) {
+	stopEvent := ClaudeStreamChunk{
+		Type: "message_stop",
+	}
+	if data, err := json.Marshal(stopEvent); err == nil {
+		fmt.Fprintf(w, "event: message_stop\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+}
+
+func (s *ClaudeService) sendDefaultSequence(w http.ResponseWriter, flusher http.Flusher, messageID string) {
+	// Send complete default sequence for empty response
+	s.sendMessageStart(w, flusher, messageID, 0, 0)
+	s.sendContentBlockStart(w, flusher)
+	
+	// Send default content
+	contentDelta := ClaudeStreamChunk{
+		Type:  "content_block_delta",
+		Index: 0,
+		Delta: &ClaudeStreamDelta{
+			Type: "text_delta",
+			Text: "I apologize, but I'm unable to process your request at the moment.",
+		},
+	}
+	if data, err := json.Marshal(contentDelta); err == nil {
+		fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+	
+	s.sendContentBlockStop(w, flusher)
+	s.sendMessageDelta(w, flusher, messageID, "end_turn", 0, 0)
+	s.sendMessageStop(w, flusher)
+}
+
+func (s *ClaudeService) sendErrorEvent(w http.ResponseWriter, flusher http.Flusher, err error) {
+	errorEvent := map[string]interface{}{
+		"type":  "error",
+		"error": err.Error(),
+	}
+	if data, jsonErr := json.Marshal(errorEvent); jsonErr == nil {
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", data)
+		flusher.Flush()
 	}
 }
