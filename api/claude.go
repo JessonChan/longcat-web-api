@@ -12,11 +12,11 @@ import (
 
 // Claude API compatible request structure
 type ClaudeAPIRequest struct {
-	Model     string                 `json:"model"`
-	MaxTokens int                    `json:"max_tokens"`
-	Messages  []ClaudeMessage        `json:"messages"`
-	Stream    bool                   `json:"stream,omitempty"`
-	System    []ClaudeMessageContent `json:"system,omitempty"`
+	Model     string          `json:"model"`
+	MaxTokens int             `json:"max_tokens"`
+	Messages  []ClaudeMessage  `json:"messages"`
+	Stream    bool            `json:"stream,omitempty"`
+	System    interface{}      `json:"system,omitempty"` // string or []ClaudeMessageContent
 }
 
 type ClaudeMessage struct {
@@ -145,6 +145,15 @@ func (s *ClaudeService) convertRequest(requestBody []byte, conversationID string
 		}
 	}
 
+	// Handle system message if present
+	// Note: LongCat doesn't have a separate system field, so we prepend it to the content
+	if claudeReq.System != nil {
+		systemContent := s.extractSystemContent(claudeReq.System)
+		if systemContent != "" {
+			content = "System: " + systemContent + "\n\nUser: " + content
+		}
+	}
+
 	return LongCatRequest{
 		Content:        content,
 		ConversationId: conversationID,
@@ -152,6 +161,28 @@ func (s *ClaudeService) convertRequest(requestBody []byte, conversationID string
 		SearchEnabled:  0,
 		Regenerate:     0,
 	}, nil
+}
+
+// extractSystemContent extracts content from the system field (string or []ClaudeMessageContent)
+func (s *ClaudeService) extractSystemContent(system interface{}) string {
+	switch v := system.(type) {
+	case string:
+		return v
+	case []interface{}:
+		var content strings.Builder
+		for _, item := range v {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				if itemType, ok := itemMap["type"].(string); ok && itemType == "text" {
+					if itemText, ok := itemMap["text"].(string); ok {
+						content.WriteString(itemText)
+					}
+				}
+			}
+		}
+		return content.String()
+	default:
+		return ""
+	}
 }
 
 func (s *ClaudeService) ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error) {

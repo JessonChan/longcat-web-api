@@ -179,11 +179,29 @@ func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Messag
 
 		// Convert Claude messages to our Message format
 		messages := []types.Message{}
-		for _, m := range req.System {
-			messages = append(messages, types.Message{
-				Content: m.Text,
-				Role:    "system",
-			})
+		
+		// Handle system field (can be string or []ClaudeMessageContent)
+		if req.System != nil {
+			switch system := req.System.(type) {
+			case string:
+				messages = append(messages, types.Message{
+					Content: system,
+					Role:    "system",
+				})
+			case []interface{}:
+				for _, item := range system {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						if itemType, ok := itemMap["type"].(string); ok && itemType == "text" {
+							if itemText, ok := itemMap["text"].(string); ok {
+								messages = append(messages, types.Message{
+									Content: itemText,
+									Role:    "system",
+								})
+							}
+						}
+					}
+				}
+			}
 		}
 		for _, m := range req.Messages {
 			if str, ok := m.Content.(string); ok {
