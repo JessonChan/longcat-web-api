@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Jessonchan/longcat-web-api/api"
-	"github.com/Jessonchan/longcat-web-api/config"
-	conversation "github.com/Jessonchan/longcat-web-api/convsersation"
-	"github.com/Jessonchan/longcat-web-api/logging"
-	"github.com/Jessonchan/longcat-web-api/types"
+	"github.com/JessonChan/longcat-web-api/api"
+	"github.com/JessonChan/longcat-web-api/config"
+	conversation "github.com/JessonChan/longcat-web-api/convsersation"
+	"github.com/JessonChan/longcat-web-api/logging"
+	"github.com/JessonChan/longcat-web-api/types"
 )
 
 

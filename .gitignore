@@ -27,4 +27,5 @@ Thumbs.db
 # Logs
 *.log
 longcat-api-wrapper
+longcat-web-api
 tmp/

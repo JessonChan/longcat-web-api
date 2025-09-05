@@ -29,9 +29,27 @@ OpenAI 和 Claude API 兼容的 LongCat 聊天服务。这允许您将 LongCat �
 
 ## 🚀 快速开始
 
+
 ### 前置要求
 - Go 1.21 或更高版本
 - LongCat 聊天账户
+
+## 📦 安装
+
+
+### 使用 Go Install
+```bash
+go install github.com/JessonChan/longcat-web-api@latest
+```
+
+
+### 从源代码安装
+```bash
+git clone https://github.com/JessonChan/longcat-web-api.git
+cd longcat-web-api
+go build -o longcat-web-api
+```
+
 
 ### 1. 构建应用程序
 ```bash
@@ -60,19 +78,6 @@ go build -o longcat-web-api
 
 服务器将在默认端口 8082 上启动。
 
-## 📦 安装
-
-### 从源代码安装
-```bash
-git clone https://github.com/JessonChan/longcat-web-api.git
-cd longcat-web-api
-go build -o longcat-web-api
-```
-
-### 使用 Go Install
-```bash
-go install github.com/JessonChan/longcat-web-api@latest
-```
 
 ## ⚙️ 配置
 

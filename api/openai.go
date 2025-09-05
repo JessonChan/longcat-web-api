@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 	"github.com/google/uuid"
-	"github.com/Jessonchan/longcat-web-api/logging"
+	"github.com/JessonChan/longcat-web-api/logging"
 )
 
 // OpenAI compatible request structures

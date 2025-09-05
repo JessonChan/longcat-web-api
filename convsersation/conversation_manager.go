@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Jessonchan/longcat-web-api/types"
+	"github.com/JessonChan/longcat-web-api/types"
 )
 
 // ConversationEntry stores conversation metadata

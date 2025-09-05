@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-	"github.com/Jessonchan/longcat-web-api/config"
-	"github.com/Jessonchan/longcat-web-api/types"
+	"github.com/JessonChan/longcat-web-api/config"
+	"github.com/JessonChan/longcat-web-api/types"
 )
 
 // APIServiceType represents the type of API service

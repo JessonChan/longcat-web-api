@@ -32,6 +32,20 @@ OpenAI and Claude API compatible wrapper for LongCat Chat service. This allows y
 
 ## 🚀 Quick Start
 
+## 📦 Installation
+
+### Using Go Install
+```bash
+go install github.com/JessonChan/longcat-web-api@latest
+```
+
+### From Source
+```bash
+git clone https://github.com/JessonChan/longcat-web-api.git
+cd longcat-web-api
+go build -o longcat-web-api
+```
+
 ### Prerequisites
 - Go 1.21 or higher
 - LongCat Chat account
@@ -63,19 +77,6 @@ Paste your cookies here and press Enter:
 
 The server will start on port 8082 by default.
 
-## 📦 Installation
-
-### From Source
-```bash
-git clone https://github.com/JessonChan/longcat-web-api.git
-cd longcat-web-api
-go build -o longcat-web-api
-```
-
-### Using Go Install
-```bash
-go install github.com/JessonChan/longcat-web-api@latest
-```
 
 ## ⚙️ Configuration
 
