@@ -62,6 +62,38 @@ Paste your cookies here and press Enter:
 
 The server will start on port 8082 by default.
 
+## 🤖 Client Configuration
+
+### DeepChat Configuration
+
+1. **Open DeepChat**
+2. **Go to Settings → Providers**
+3. **Add Custom Provider:**
+   - **Provider Name:** `LongCat API`
+   - **API Key:** `any-code` (or any text you want)
+   - **Base URL:** `http://localhost:8082/v1`
+   - **Model:** `gpt-4` (or any model name)
+4. **Save and select the LongCat API provider**
+
+### CherryStudio Configuration
+
+1. **Open CherryStudio**
+2. **Go to Settings → API Keys**
+3. **Add Custom API Configuration:**
+   - **API Name:** `LongCat API`
+   - **API Key:** `any-code` (required, but can be any text)
+   - **API URL:** `http://localhost:8082/v1`
+   - **Model:** `gpt-4`
+4. **Save and select the LongCat API configuration**
+
+### Other OpenAI-Compatible Clients
+
+For any OpenAI-compatible client, use these settings:
+- **API Key:** `any-code` (not validated, but required by most clients)
+- **Base URL:** `http://localhost:8082/v1`
+- **Model:** `gpt-4` (or any model name you prefer)
+
+
 ### From Source
 ```bash
 git clone https://github.com/JessonChan/longcat-web-api.git

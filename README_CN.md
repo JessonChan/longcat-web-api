@@ -65,6 +65,38 @@ longcat-web-api
 
 服务器将在默认端口 8082 上启动。
 
+## 🤖 客户端配置
+
+### DeepChat 配置
+
+1. **打开 DeepChat**
+2. **前往 设置 → 提供商**
+3. **添加自定义提供商：**
+   - **提供商名称：** `LongCat API`
+   - **API 密钥：** `any-code` (或任何您想要的文本)
+   - **基础 URL：** `http://localhost:8082/v1`
+   - **模型：** `gpt-4` (或任何模型名称)
+4. **保存并选择 LongCat API 提供商**
+
+### CherryStudio 配置
+
+1. **打开 CherryStudio**
+2. **前往 设置 → API 密钥**
+3. **添加自定义 API 配置：**
+   - **API 名称：** `LongCat API`
+   - **API 密钥：** `any-code` (必需，但可以是任何文本)
+   - **API URL：** `http://localhost:8082/v1`
+   - **模型：** `gpt-4`
+4. **保存并选择 LongCat API 配置**
+
+### 其他 OpenAI 兼容客户端
+
+对于任何 OpenAI 兼容的客户端，使用以下设置：
+- **API 密钥：** `any-code` (不验证，但大多数客户端需要)
+- **基础 URL：** `http://localhost:8082/v1`
+- **模型：** `gpt-4` (或您喜欢的任何模型名称)
+
+
 ### 从源代码安装
 ```bash
 git clone https://github.com/JessonChan/longcat-web-api.git
