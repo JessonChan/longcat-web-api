@@ -3,7 +3,7 @@
 [![Go 版本](https://img.shields.io/badge/go-1.21+-blue.svg)](https://golang.org)
 [![许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-OpenAI 和 Claude API 兼容的 LongCat 聊天服务包装器。这允许您将 LongCat 与任何 OpenAI 或 Claude API 兼容的客户端一起使用。
+OpenAI 和 Claude API 兼容的 LongCat 聊天服务。这允许您将 LongCat 与任何 OpenAI 或 Claude API 兼容的客户端一起使用。
 
 ## 🚀 功能特性
 

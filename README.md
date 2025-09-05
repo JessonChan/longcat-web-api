@@ -2,8 +2,11 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.21+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![中文文档](https://img.shields.io/badge/docs-%E4%B8%AD%E6%96%87-red.svg)](README_CN.md)
 
 OpenAI and Claude API compatible wrapper for LongCat Chat service. This allows you to use LongCat with any OpenAI or Claude API compatible client.
+
+**📖 [中文版本](README_CN.md) | [English Version](README.md)**
 
 ## 🚀 Features
 
