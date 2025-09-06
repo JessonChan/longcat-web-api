@@ -2,7 +2,6 @@ package api
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -321,50 +320,6 @@ func NewOpenAIService(client *LongCatClient) *OpenAIService {
 }
 
 
-func (s *OpenAIService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
-	var req ChatCompletionRequest
-	if err := json.Unmarshal(requestBody, &req); err != nil {
-		return nil, fmt.Errorf("invalid OpenAI request: %w", err)
-	}
-
-	longCatReq, err := s.convertRequest(requestBody, conversationID)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.longCatClient.SendRequest(ctx, longCatReq)
-}
-
-// convertRequest converts OpenAI request format to LongCat request format
-func (s *OpenAIService) convertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
-	var openAIReq ChatCompletionRequest
-	if err := json.Unmarshal(requestBody, &openAIReq); err != nil {
-		return LongCatRequest{}, fmt.Errorf("invalid OpenAI request: %w", err)
-	}
-
-	var content string
-	if len(openAIReq.Messages) > 0 {
-		lastMsg := openAIReq.Messages[len(openAIReq.Messages)-1]
-		if str, ok := lastMsg.Content.(string); ok {
-			content = str
-		}
-		if ls, ok := lastMsg.Content.([]interface{}); ok {
-			for _, l := range ls {
-				if str, ok := l.(map[string]any); ok {
-					content += str["text"].(string)
-				}
-			}
-		}
-	}
-
-	return LongCatRequest{
-		Content:        content,
-		ConversationId: conversationID,
-		ReasonEnabled:  0,
-		SearchEnabled:  0,
-		Regenerate:     0,
-	}, nil
-}
 
 func (s *OpenAIService) ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error) {
 	chunks := make(chan interface{}, 10) // Buffered channel

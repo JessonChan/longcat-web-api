@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
 	"github.com/JessonChan/longcat-web-api/config"
-	"github.com/JessonChan/longcat-web-api/types"
 )
 
 // APIServiceType represents the type of API service
@@ -21,12 +21,11 @@ const (
 
 // LongCatRequest represents a request to the LongCat API
 type LongCatRequest struct {
-	Content        string          `json:"content"`
-	Messages       []types.Message `json:"messages"`
-	ReasonEnabled  int             `json:"reasonEnabled"`
-	SearchEnabled  int             `json:"searchEnabled"`
-	Regenerate     int             `json:"regenerate"`
-	ConversationId string          `json:"conversationId,omitempty"`
+	Content        string `json:"content"`
+	ReasonEnabled  int    `json:"reasonEnabled"`
+	SearchEnabled  int    `json:"searchEnabled"`
+	Regenerate     int    `json:"regenerate"`
+	ConversationId string `json:"conversationId,omitempty"`
 }
 
 // LongCatClient handles unified HTTP requests to LongCat server
@@ -143,18 +142,15 @@ func (c *LongCatClient) sendRequest(ctx context.Context, reqUrl string, longCatR
 
 // APIService interface for different API compatibility layers
 type APIService interface {
-	// ProcessRequest sends the request to the underlying service and returns raw HTTP response
-	ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error)
-	
 	// ConvertResponse processes the HTTP response and returns streaming channels for data and errors
 	ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error)
-	
+
 	// GetResponseContentType returns the appropriate content type for responses
 	GetResponseContentType(stream bool) string
-	
+
 	// HandleNonStreamingResponse handles non-streaming HTTP responses
 	HandleNonStreamingResponse(w http.ResponseWriter, chunks <-chan interface{}, errs <-chan error) error
-	
+
 	// HandleStreamingResponse handles streaming HTTP responses using Server-Sent Events
 	HandleStreamingResponse(w http.ResponseWriter, flusher http.Flusher, chunks <-chan interface{}, errs <-chan error) error
 }

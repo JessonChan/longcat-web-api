@@ -132,16 +132,22 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.conversationManager.SetConversation(messages, conversationID)
 		logging.LogInfo("Created new conversation: %s", conversationID)
 	}
+	// Create LongCat request from extracted messages
+	longCatReq, err := createLongCatRequest(messages, conversationID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create LongCat request: %v", err), http.StatusBadRequest)
+		return
+	}
 
 	// Determine if streaming is requested
 	streaming := h.isStreamingRequest(bs, r.URL.Path)
 
 	if !streaming {
-		h.handleNonStreaming(w, r, service, bs, conversationID)
+		h.handleNonStreaming(w, r, service, longCatReq)
 		return
 	}
 
-	h.handleStreaming(w, r, service, bs, conversationID)
+	h.handleStreaming(w, r, service, longCatReq)
 }
 
 // extractAssistantMessagesFromResponse extracts assistant messages from API responses
@@ -278,8 +284,8 @@ func (h *UnifiedHandler) isStreamingRequest(requestBody []byte, path string) boo
 	return false
 }
 
-func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Request, service api.APIService, requestBody []byte, conversationID string) {
-	resp, err := service.ProcessRequest(r.Context(), requestBody, conversationID)
+func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Request, service api.APIService, longCatReq api.LongCatRequest) {
+	resp, err := h.longCatClient.SendRequest(r.Context(), longCatReq)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to make request: %v", err), http.StatusInternalServerError)
 		return
@@ -288,8 +294,8 @@ func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Reque
 	// Update LastOriginal with assistant response
 	assistantMessages := extractAssistantMessagesFromResponse(resp)
 	if len(assistantMessages) > 0 {
-		h.conversationManager.UpdateLastOriginal(conversationID, assistantMessages)
-		logging.LogInfo("Updated LastOriginal for conversation %s", conversationID)
+		h.conversationManager.UpdateLastOriginal(longCatReq.ConversationId, assistantMessages)
+		logging.LogInfo("Updated LastOriginal for conversation %s", longCatReq.ConversationId)
 	}
 
 	chunks, errs := service.ConvertResponse(resp, false)
@@ -301,7 +307,7 @@ func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request, service api.APIService, requestBody []byte, conversationID string) {
+func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request, service api.APIService, longCatReq api.LongCatRequest) {
 	// Set SSE headers with CORS support
 	w.Header().Set("Content-Type", service.GetResponseContentType(true))
 	w.Header().Set("Cache-Control", "no-cache")
@@ -312,7 +318,7 @@ func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, anthropic-version")
 	w.Header().Set("Access-Control-Expose-Headers", "*")
 
-	resp, err := service.ProcessRequest(r.Context(), requestBody, conversationID)
+	resp, err := h.longCatClient.SendRequest(r.Context(), longCatReq)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to make request: %v", err), http.StatusInternalServerError)
 		return
@@ -336,8 +342,8 @@ func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request,
 	// Update LastOriginal with assistant response after streaming completes
 	assistantMessages := extractAssistantMessagesFromResponse(resp)
 	if len(assistantMessages) > 0 {
-		h.conversationManager.UpdateLastOriginal(conversationID, assistantMessages)
-		logging.LogInfo("Updated LastOriginal for conversation %s after streaming", conversationID)
+		h.conversationManager.UpdateLastOriginal(longCatReq.ConversationId, assistantMessages)
+		logging.LogInfo("Updated LastOriginal for conversation %s after streaming", longCatReq.ConversationId)
 	}
 }
 
@@ -456,4 +462,24 @@ func ensureCookiesConfigured() {
 	// Update AppConfig with obtained cookies
 	config.AppConfig.Cookies = cookies
 	fmt.Println("✓ Cookies configured successfully")
+}
+
+// createLongCatRequest creates a LongCatRequest from the extracted messages and request data
+func createLongCatRequest(messages []types.Message, conversationID string) (api.LongCatRequest, error) {
+	// Extract the last user message content as the primary content
+	var content string
+	if len(messages) > 0 {
+		lastMsg := messages[len(messages)-1]
+		if lastMsg.Role == "user" {
+			content = lastMsg.Content
+		}
+	}
+
+	return api.LongCatRequest{
+		Content:        content,
+		ConversationId: conversationID,
+		ReasonEnabled:  0,
+		SearchEnabled:  0,
+		Regenerate:     0,
+	}, nil
 }

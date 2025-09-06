@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -110,81 +109,6 @@ func NewClaudeService(client *LongCatClient) *ClaudeService {
 	}
 }
 
-func (s *ClaudeService) ProcessRequest(ctx context.Context, requestBody []byte, conversationID string) (*http.Response, error) {
-	var req ClaudeAPIRequest
-	if err := json.Unmarshal(requestBody, &req); err != nil {
-		return nil, fmt.Errorf("invalid Claude request: %w", err)
-	}
-
-	longCatReq, err := s.convertRequest(requestBody, conversationID)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.longCatClient.SendRequest(ctx, longCatReq)
-}
-
-// convertRequest converts Claude request format to LongCat request format
-func (s *ClaudeService) convertRequest(requestBody []byte, conversationID string) (LongCatRequest, error) {
-	var claudeReq ClaudeAPIRequest
-	if err := json.Unmarshal(requestBody, &claudeReq); err != nil {
-		return LongCatRequest{}, fmt.Errorf("invalid Claude request: %w", err)
-	}
-
-	var content string
-	if len(claudeReq.Messages) > 0 {
-		lastMsg := claudeReq.Messages[len(claudeReq.Messages)-1]
-		if str, ok := lastMsg.Content.(string); ok {
-			content = str
-		}
-		if ls, ok := lastMsg.Content.([]interface{}); ok {
-			for _, part := range ls {
-				if str, ok := part.(map[string]any); ok {
-					content += str["text"].(string)
-				}
-			}
-		}
-	}
-
-	// Handle system message if present
-	// Note: LongCat doesn't have a separate system field, so we prepend it to the content
-	if claudeReq.System != nil {
-		systemContent := s.extractSystemContent(claudeReq.System)
-		if systemContent != "" {
-			content = "System: " + systemContent + "\n\nUser: " + content
-		}
-	}
-
-	return LongCatRequest{
-		Content:        content,
-		ConversationId: conversationID,
-		ReasonEnabled:  0,
-		SearchEnabled:  0,
-		Regenerate:     0,
-	}, nil
-}
-
-// extractSystemContent extracts content from the system field (string or []ClaudeMessageContent)
-func (s *ClaudeService) extractSystemContent(system interface{}) string {
-	switch v := system.(type) {
-	case string:
-		return v
-	case []interface{}:
-		var content strings.Builder
-		for _, item := range v {
-			if itemMap, ok := item.(map[string]interface{}); ok {
-				if itemType, ok := itemMap["type"].(string); ok && itemType == "text" {
-					if itemText, ok := itemMap["text"].(string); ok {
-						content.WriteString(itemText)
-					}
-				}
-			}
-		}
-		return content.String()
-	default:
-		return ""
-	}
-}
 
 func (s *ClaudeService) ConvertResponse(resp *http.Response, stream bool) (<-chan interface{}, <-chan error) {
 	chunks := make(chan interface{}, 10) // Buffered channel
