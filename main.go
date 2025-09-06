@@ -17,8 +17,6 @@ import (
 	"github.com/JessonChan/longcat-web-api/types"
 )
 
-
-
 // Session creation structures
 type SessionCreateRequest struct {
 	Model   string `json:"model"`
@@ -42,13 +40,6 @@ type SessionCreateData struct {
 	CreateAt         int64  `json:"createAt"`
 	UpdateAt         int64  `json:"updateAt"`
 }
-
-
-
-
-
-
-
 
 // UnifiedHandler handles both OpenAI and Claude API requests using the interface
 type UnifiedHandler struct {
@@ -123,6 +114,13 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if existingConvID, exists := h.conversationManager.FindConversation(messages); exists {
 		conversationID = existingConvID
 		logging.LogInfo("Using existing conversation: %s", conversationID)
+
+		// Update conversation with new messages (len-2 portion)
+		if len(messages) >= 2 {
+			newMessages := messages[len(messages)-2:]
+			h.conversationManager.UpdateConversation(conversationID, newMessages)
+			logging.LogInfo("Updated conversation with new messages")
+		}
 	} else {
 		// Create new conversation session
 		newConvID, err := h.longCatClient.CreateSession(r.Context())
@@ -146,6 +144,37 @@ func (h *UnifiedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handleStreaming(w, r, service, bs, conversationID)
 }
 
+// extractAssistantMessagesFromResponse extracts assistant messages from API responses
+func extractAssistantMessagesFromResponse(response interface{}) []types.Message {
+	var messages []types.Message
+
+	switch r := response.(type) {
+	case *api.ChatCompletionResponse:
+		// OpenAI response
+		if len(r.Choices) > 0 {
+			choice := r.Choices[0]
+			messages = append(messages, types.Message{
+				Role:    "assistant",
+				Content: choice.Delta.Content,
+			})
+		}
+	case *api.ClaudeAPIResponse:
+		// Claude response
+		if len(r.Content) > 0 {
+			for _, content := range r.Content {
+				if content.Type == "text" {
+					messages = append(messages, types.Message{
+						Role:    "assistant",
+						Content: content.Text,
+					})
+				}
+			}
+		}
+	}
+
+	return messages
+}
+
 // extractMessagesFromRequest extracts messages from OpenAI/Claude request
 func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Message, error) {
 	switch path {
@@ -156,6 +185,10 @@ func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Messag
 		}
 		messages := []types.Message{}
 		for _, m := range req.Messages {
+			// LongCat not supporting system role
+			if m.Role != "user" {
+				continue
+			}
 			if str, ok := m.Content.(string); ok {
 				messages = append(messages, types.Message{
 					Content: str,
@@ -182,30 +215,30 @@ func extractMessagesFromRequest(requestBody []byte, path string) ([]types.Messag
 
 		// Convert Claude messages to our Message format
 		messages := []types.Message{}
-		
+
 		// Handle system field (can be string or []ClaudeMessageContent)
-		if req.System != nil {
-			switch system := req.System.(type) {
-			case string:
-				messages = append(messages, types.Message{
-					Content: system,
-					Role:    "system",
-				})
-			case []interface{}:
-				for _, item := range system {
-					if itemMap, ok := item.(map[string]interface{}); ok {
-						if itemType, ok := itemMap["type"].(string); ok && itemType == "text" {
-							if itemText, ok := itemMap["text"].(string); ok {
-								messages = append(messages, types.Message{
-									Content: itemText,
-									Role:    "system",
-								})
-							}
-						}
-					}
-				}
-			}
-		}
+		// if req.System != nil {
+		// 	switch system := req.System.(type) {
+		// 	case string:
+		// 		messages = append(messages, types.Message{
+		// 			Content: system,
+		// 			Role:    "system",
+		// 		})
+		// 	case []interface{}:
+		// 		for _, item := range system {
+		// 			if itemMap, ok := item.(map[string]interface{}); ok {
+		// 				if itemType, ok := itemMap["type"].(string); ok && itemType == "text" {
+		// 					if itemText, ok := itemMap["text"].(string); ok {
+		// 						messages = append(messages, types.Message{
+		// 							Content: itemText,
+		// 							Role:    "system",
+		// 						})
+		// 					}
+		// 				}
+		// 			}
+		// 		}
+		// 	}
+		// }
 		for _, m := range req.Messages {
 			if str, ok := m.Content.(string); ok {
 				messages = append(messages, types.Message{
@@ -252,6 +285,13 @@ func (h *UnifiedHandler) handleNonStreaming(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Update LastOriginal with assistant response
+	assistantMessages := extractAssistantMessagesFromResponse(resp)
+	if len(assistantMessages) > 0 {
+		h.conversationManager.UpdateLastOriginal(conversationID, assistantMessages)
+		logging.LogInfo("Updated LastOriginal for conversation %s", conversationID)
+	}
+
 	chunks, errs := service.ConvertResponse(resp, false)
 
 	// Use the service's own handler method instead of type assertion
@@ -291,6 +331,13 @@ func (h *UnifiedHandler) handleStreaming(w http.ResponseWriter, r *http.Request,
 		logging.LogDebug("Streaming error: %v", err)
 		// Error is already handled by the service implementation
 		return
+	}
+
+	// Update LastOriginal with assistant response after streaming completes
+	assistantMessages := extractAssistantMessagesFromResponse(resp)
+	if len(assistantMessages) > 0 {
+		h.conversationManager.UpdateLastOriginal(conversationID, assistantMessages)
+		logging.LogInfo("Updated LastOriginal for conversation %s after streaming", conversationID)
 	}
 }
 
@@ -359,11 +406,11 @@ func main() {
 	handler := NewUnifiedHandler(*verbose)
 
 	serverAddr := config.AppConfig.GetServerAddress()
-	
+
 	// Always show basic startup info
 	fmt.Printf("\n=== LongCat API Wrapper ===\n")
 	fmt.Printf("Starting OpenAI and Claude compatible server on %s\n", serverAddr)
-	
+
 	// Show detailed info only in verbose mode
 	if *verbose {
 		fmt.Println("\nEndpoints:")

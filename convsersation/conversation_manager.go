@@ -14,6 +14,7 @@ import (
 type ConversationEntry struct {
 	ConversationID string
 	Messages       []types.Message // Store actual messages for comparison
+	LastOriginal   []types.Message // Store last assistant response for disambiguation
 	LastAccessed   time.Time
 	CreatedAt      time.Time
 }
@@ -63,8 +64,12 @@ func (cm *ConversationManager) GenerateFingerprint(messages []types.Message) str
 	return fmt.Sprintf("%x", finalHash)
 }
 
-// FindConversation implements robust matching logic
+// FindConversation implements len-2 prefix matching logic
 func (cm *ConversationManager) FindConversation(messages []types.Message) (string, bool) {
+	// only one message, no need to match
+	if len(messages) < 2 {
+		return "", false
+	}
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
@@ -80,106 +85,88 @@ func (cm *ConversationManager) FindConversation(messages []types.Message) (strin
 		return entry.ConversationID, true
 	}
 
-	// 2. Try sliding window match for partial history
-	// This handles the case where new messages continue an existing conversation
-	bestMatch := cm.findBestContinuation(messages)
-	if bestMatch != nil {
-		bestMatch.LastAccessed = time.Now()
-		return bestMatch.ConversationID, true
-	}
+	// 2. Try len-2 prefix matching for new request format
+	if len(messages) >= 2 {
+		prefix := messages[:len(messages)-2]
+		newMessages := messages[len(messages)-2:]
 
-	// 3. Check if this is a subset of an existing conversation
-	// This handles the case where we're querying with partial history
-	subset := cm.findSupersetConversation(messages)
-	if subset != nil {
-		subset.LastAccessed = time.Now()
-		return subset.ConversationID, true
+		// Find conversations with matching prefix
+		matchingConversations := cm.findConversationsWithPrefix(prefix)
+
+		if len(matchingConversations) == 1 {
+			// Single match, use it
+			matchingConversations[0].LastAccessed = time.Now()
+			return matchingConversations[0].ConversationID, true
+		} else if len(matchingConversations) > 1 {
+			// Multiple matches, use LastOriginal to disambiguate
+			bestMatch := cm.disambiguateByLastOriginal(matchingConversations, newMessages)
+			if bestMatch != nil {
+				bestMatch.LastAccessed = time.Now()
+				return bestMatch.ConversationID, true
+			}
+		}
 	}
 
 	return "", false
 }
 
-// findBestContinuation finds conversations that could be continued by the new messages
-func (cm *ConversationManager) findBestContinuation(newMessages []types.Message) *ConversationEntry {
-	// Look for conversations where the tail matches the head of new messages
-	// Example: existing [1,2,3], new [2,3,4] -> continues the conversation
-
-	var bestMatch *ConversationEntry
-	maxOverlap := 0
+// findConversationsWithPrefix finds all conversations that have the exact prefix
+func (cm *ConversationManager) findConversationsWithPrefix(prefix []types.Message) []*ConversationEntry {
+	var matches []*ConversationEntry
 
 	for _, entry := range cm.conversations {
-		overlap := cm.calculateOverlap(entry.Messages, newMessages)
-		if overlap > maxOverlap && overlap >= len(entry.Messages)/2 { // At least 50% overlap
-			maxOverlap = overlap
-			bestMatch = entry
+		if cm.hasExactPrefix(entry.Messages, prefix) {
+			matches = append(matches, entry)
 		}
 	}
 
-	return bestMatch
+	return matches
 }
 
-// calculateOverlap finds the overlap between tail of existing and head of new messages
-func (cm *ConversationManager) calculateOverlap(existing, newMessages []types.Message) int {
-	maxOverlap := 0
-
-	// Check all possible overlaps
-	for i := 1; i <= len(existing) && i <= len(newMessages); i++ {
-		// Check if last i messages of existing match first i messages of new
-		match := true
-		for j := 0; j < i; j++ {
-			existingIdx := len(existing) - i + j
-			if !cm.messagesEqual(existing[existingIdx], newMessages[j]) {
-				match = false
-				break
-			}
-		}
-		if match {
-			maxOverlap = i
-		}
-	}
-
-	return maxOverlap
-}
-
-// findSupersetConversation finds conversations that contain the entire message sequence
-func (cm *ConversationManager) findSupersetConversation(messages []types.Message) *ConversationEntry {
-	if len(messages) == 0 {
-		return nil
-	}
-
-	// Use index to find conversations containing the first message
-	firstMsgHash := cm.hashMessage(messages[0])
-	candidates := cm.messageIndex[firstMsgHash]
-
-	for _, entry := range candidates {
-		if cm.containsSequence(entry.Messages, messages) {
-			return entry
-		}
-	}
-
-	return nil
-}
-
-// containsSequence checks if haystack contains needle as a subsequence
-func (cm *ConversationManager) containsSequence(haystack, needle []types.Message) bool {
-	if len(needle) > len(haystack) {
+// hasExactPrefix checks if the conversation messages start with the exact prefix
+func (cm *ConversationManager) hasExactPrefix(messages, prefix []types.Message) bool {
+	if len(messages) < len(prefix) {
 		return false
 	}
 
-	for i := 0; i <= len(haystack)-len(needle); i++ {
-		match := true
-		for j := 0; j < len(needle); j++ {
-			if !cm.messagesEqual(haystack[i+j], needle[j]) {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
+	for i := range prefix {
+		if !cm.messagesEqual(messages[i], prefix[i]) {
+			return false
 		}
 	}
 
-	return false
+	return true
+}
+
+// disambiguateByLastOriginal finds the best match using LastOriginal comparison
+func (cm *ConversationManager) disambiguateByLastOriginal(conversations []*ConversationEntry, newMessages []types.Message) *ConversationEntry {
+	if len(newMessages) == 0 {
+		// No new messages to comparet
+		return nil
+	}
+
+	// The first message in newMessages should be the assistant response
+	assistantMsg := newMessages[0]
+
+	// Try to find exact match with LastOriginal
+
+	entries := make([]*ConversationEntry, 0)
+	for _, entry := range conversations {
+		if len(entry.LastOriginal) > 0 && cm.messagesEqual(entry.LastOriginal[0], assistantMsg) {
+			entries = append(entries, entry)
+		}
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	// find the latest entry
+	lastedEntry := entries[0]
+	for _, entry := range conversations {
+		if entry.LastAccessed.After(lastedEntry.LastAccessed) {
+			lastedEntry = entry
+		}
+	}
+	return lastedEntry
 }
 
 // messagesEqual compares two messages
@@ -227,8 +214,16 @@ func (cm *ConversationManager) UpdateConversation(conversationID string, newMess
 		return
 	}
 
+	// Only append messages that don't already exist in the conversation
+	uniqueMessages := cm.filterDuplicateMessages(existingEntry.Messages, newMessages)
+	if len(uniqueMessages) == 0 {
+		// No new messages to add, just update access time
+		existingEntry.LastAccessed = time.Now()
+		return
+	}
+
 	// Create new extended message history
-	extendedMessages := append(existingEntry.Messages, newMessages...)
+	extendedMessages := append(existingEntry.Messages, uniqueMessages...)
 
 	// Remove old fingerprint
 	oldFingerprint := cm.GenerateFingerprint(existingEntry.Messages)
@@ -241,10 +236,30 @@ func (cm *ConversationManager) UpdateConversation(conversationID string, newMess
 	cm.conversations[newFingerprint] = existingEntry
 
 	// Update message index
-	for _, msg := range newMessages {
+	for _, msg := range uniqueMessages {
 		msgHash := cm.hashMessage(msg)
 		cm.messageIndex[msgHash] = append(cm.messageIndex[msgHash], existingEntry)
 	}
+}
+
+// filterDuplicateMessages returns only messages that don't already exist in the conversation
+func (cm *ConversationManager) filterDuplicateMessages(existing, new []types.Message) []types.Message {
+	var unique []types.Message
+
+	for _, newMsg := range new {
+		found := false
+		for _, existingMsg := range existing {
+			if cm.messagesEqual(newMsg, existingMsg) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			unique = append(unique, newMsg)
+		}
+	}
+
+	return unique
 }
 
 // cleanupExpired removes old conversations
@@ -292,6 +307,29 @@ func (cm *ConversationManager) cleanupExpired() {
 
 		cm.mu.Unlock()
 	}
+}
+
+// UpdateLastOriginal updates the LastOriginal field for a conversation
+func (cm *ConversationManager) UpdateLastOriginal(conversationID string, assistantMessages []types.Message) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Find the existing conversation
+	var existingEntry *ConversationEntry
+	for _, entry := range cm.conversations {
+		if entry.ConversationID == conversationID {
+			existingEntry = entry
+			break
+		}
+	}
+
+	if existingEntry == nil {
+		return
+	}
+
+	// Update LastOriginal with the assistant response
+	existingEntry.LastOriginal = assistantMessages
+	existingEntry.LastAccessed = time.Now()
 }
 
 // GetStats returns statistics about the conversation manager
